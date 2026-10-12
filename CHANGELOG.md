@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.2.1 — 2026-10-12
+
+- Oferece o complemento de IA ao final do `run` em terminais interativos, inclusive quando o PDF não é gerado.
+- Adiciona `ai-report --assessment` para iniciar o fluxo guiado usando um JSON existente, sem repetir a coleta Salesforce.
+- Exige escolha de provedor, modelo, dados e credencial, prévia sanitizada e frase de autorização exata antes de chamar IA.
+- Preserva o assessment em cancelamentos e erros e adiciona `--no-ai-prompt` para pular a oferta; sessões não interativas não chamam IA.
+
 ## 4.2.0 — 2026-10-12
 
 - Publica o pacote Python com o nome de distribuição `labforce-dementor`.

@@ -61,7 +61,17 @@ Por padrão, os resultados são gravados em `./assessments/<org>/<data-hora>` e 
 
 ## IA opcional com autorização explícita
 
-Primeiro, gere a prévia sanitizada. Essa etapa não chama o provedor:
+Ao terminar `dementor run` em um terminal interativo, responda à pergunta sobre gerar o complemento. Você escolhe provedor, modelo, dados e credencial, revisa a prévia e digita a frase de autorização antes do envio. Use `--no-ai-prompt` para pular essa etapa; sessões sem terminal não chamam IA.
+
+Para usar um JSON já gerado sem refazer a coleta:
+
+```bash
+dementor ai-report --assessment assessments/MINHA_ORG/EXECUCAO/assessment.json
+```
+
+O assistente lê a chave da variável de ambiente do provedor (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY` ou `GEMINI_API_KEY`) ou do cofre Labforce, conforme sua escolha. Ollama local não exige chave. Cancelar ou falhar na etapa preserva o assessment.
+
+Os comandos manuais continuam disponíveis. Primeiro, gere a prévia sanitizada. Essa etapa não chama o provedor:
 
 ```bash
 dementor ai-preview \

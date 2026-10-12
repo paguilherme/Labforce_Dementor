@@ -1,4 +1,4 @@
-# Labforce Dementor for Salesforce v4.2.0
+# Labforce Dementor for Salesforce v4.2.1
 
 O diagnóstico continua determinístico e funciona sem IA. A versão 4.1 adiciona um complemento de IA opcional, separado e sujeito à autorização explícita do usuário. A versão 4.2 entrega o pacote instalável e o comando curto `dementor`.
 
@@ -25,6 +25,16 @@ uv tool install ./labforce_dementor-4.2.0-py3-none-any.whl
 ```
 
 ## Complemento opcional por IA
+
+Em um terminal interativo, `dementor run` agora pergunta ao final se você deseja gerar o complemento. O assistente pede provedor, modelo exato, escopo dos dados e origem da credencial; cria a prévia sanitizada e só envia dados depois que você digita a frase de autorização exibida. A opção inicial de gerar o relatório ainda não autoriza o envio.
+
+Para aproveitar um assessment já concluído, sem repetir a coleta Salesforce:
+
+```bash
+dementor ai-report --assessment assessments/MINHA_ORG/EXECUCAO/assessment.json
+```
+
+Use `--no-ai-prompt` no `run` para pular a pergunta. Em sessões sem terminal interativo, o Dementor não pergunta nem chama IA e mostra como iniciar a etapa depois. Cancelar ou falhar na etapa de IA preserva o assessment. O complemento usa os mesmos controles de consentimento dos comandos abaixo.
 
 1. Gere uma prévia. Essa etapa não faz chamada externa e grava o conteúdo sanitizado que poderá ser enviado:
 
