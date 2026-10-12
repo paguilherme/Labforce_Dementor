@@ -25,6 +25,7 @@ from .impact_reporting import render_impact_html, render_impact_pdf
 from .diagnostics import doctor
 from .intelligence_v5 import drift_from_assessment, select_tests, write_knowledge_pack
 from .policy import load_policy, evaluate_policy
+from .progress import AssessmentProgress
 from .intelligence_v6 import git_changed_files, temporal_diff, deployment_impact, sarif, business_criticality
 from .enterprise import component_explanation
 from .intelligence_v7 import simulate_change, continuous_intelligence
@@ -51,6 +52,7 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--source-dir", help="Analyze an existing Salesforce source snapshot instead of retrieving metadata. Recommended with STRICT_READ_ONLY mode.")
     run.add_argument("--profile-data", action="store_true", help="Opt-in: sample a limited number of record values for null/cardinality statistics. Raw values are not persisted.")
     run.add_argument("--resume", action="store_true", help="Resume from a compatible local checkpoint when possible.")
+    run.add_argument("--no-progress", action="store_true", help="Disable real-time assessment progress output.")
 
     diff = sub.add_parser("diff", help="Compare two assessment.json snapshots")
     diff.add_argument("--from", dest="before", required=True, help="Older assessment.json")
@@ -390,13 +392,27 @@ def main(argv: list[str] | None = None) -> None:
     print(f"Mode       : {cfg['safety']['mode']}")
     print(f"Output     : {output}")
     print("Safety     : READ-ONLY command allow-list; no deploy/DML/Apex Anonymous capability")
+    print()
+    progress = AssessmentProgress(enabled=not args.no_progress)
     try:
-        manifest = run_assessment(args.target_org, work, output, cfg, wait_for_deploy_seconds=args.wait_for_deploy, source_dir=Path(args.source_dir) if args.source_dir else None, resume=args.resume)
+        manifest = run_assessment(
+            args.target_org,
+            work,
+            output,
+            cfg,
+            wait_for_deploy_seconds=args.wait_for_deploy,
+            source_dir=Path(args.source_dir) if args.source_dir else None,
+            resume=args.resume,
+            progress=progress.update,
+        )
     except (UnsafeCommandError, SFCLIError, RuntimeError) as exc:
+        progress.fail(str(exc))
         print(f"ERROR: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc
+    finally:
+        progress.close()
 
-    print("\nAssessment completed.")
+    print("Assessment completed.")
     print(f"Health     : {manifest['health']['overall']}/100")
     print(f"JSON       : {manifest['reports']['json']}")
     print(f"Markdown   : {manifest['reports']['markdown']}")
