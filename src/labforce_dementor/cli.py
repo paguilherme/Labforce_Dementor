@@ -15,6 +15,7 @@ from .ai_complement import (
     execute_complement,
 )
 from .ai_credentials import resolve_ai_credential
+from .ai_wizard import offer_ai_report
 from .branding import report_metadata, with_report_metadata
 from .config import load_config
 from .engine import run_assessment
@@ -53,6 +54,7 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--profile-data", action="store_true", help="Opt-in: sample a limited number of record values for null/cardinality statistics. Raw values are not persisted.")
     run.add_argument("--resume", action="store_true", help="Resume from a compatible local checkpoint when possible.")
     run.add_argument("--no-progress", action="store_true", help="Disable real-time assessment progress output.")
+    run.add_argument("--no-ai-prompt", action="store_true", help="Skip the optional interactive AI report offer after assessment.")
 
     diff = sub.add_parser("diff", help="Compare two assessment.json snapshots")
     diff.add_argument("--from", dest="before", required=True, help="Older assessment.json")
@@ -146,6 +148,9 @@ def build_parser() -> argparse.ArgumentParser:
     cont.add_argument("--to", dest="after", required=True)
     cont.add_argument("--output", default="continuous-intelligence.json")
 
+    ai_report = sub.add_parser("ai-report", help="Interactively generate an optional AI report from an existing assessment; no Salesforce collection")
+    ai_report.add_argument("--assessment", required=True, help="Existing deterministic assessment.json")
+
     ai_preview = sub.add_parser("ai-preview", help="Prepare the exact sanitized payload for explicit AI consent; no provider call is made")
     ai_preview.add_argument("--assessment", required=True, help="Deterministic assessment.json")
     ai_preview.add_argument("--provider", required=True, choices=PROVIDERS)
@@ -171,6 +176,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
+    if args.command == "ai-report":
+        if not offer_ai_report(Path(args.assessment)):
+            raise SystemExit(1)
+        return
     if args.command == "ai-preview":
         try:
             plan = create_preview(
@@ -419,6 +428,8 @@ def main(argv: list[str] | None = None) -> None:
     print(f"HTML       : {manifest['reports']['html']}")
     pdf = manifest['reports']['pdf']
     print(f"PDF        : {pdf['path']}" + ("" if pdf.get("generated") else f" (not generated: {pdf.get('error','unknown error')})"))
+    if not args.no_ai_prompt:
+        offer_ai_report(Path(manifest["reports"]["json"]))
 
 
 if __name__ == "__main__":
