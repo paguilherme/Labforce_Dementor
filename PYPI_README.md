@@ -47,6 +47,10 @@ sf org display --target-org MINHA_ORG
 dementor run --target-org MINHA_ORG
 ```
 
+Durante a execução, o terminal mostra em tempo real a fase atual, a atividade em andamento e o tempo decorrido. Em logs e CI, o progresso é emitido em linhas estáveis. Use `--no-progress` quando quiser ocultá-lo.
+
+Os dados humanos do assessment e os relatórios JSON, Markdown, HTML e PDF são gerados em português (pt-BR). Identificadores técnicos, nomes de componentes e enums estáveis são preservados para manter a compatibilidade com integrações.
+
 Por padrão, os resultados são gravados em `./assessments/<org>/<data-hora>` e incluem JSON, Markdown, HTML, PDF e manifestos de execução e integridade.
 
 ## Contrato de segurança

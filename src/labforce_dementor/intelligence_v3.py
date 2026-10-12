@@ -128,7 +128,7 @@ def _safe_scalar_fields(obj: dict[str, Any], limit: int) -> list[str]:
 def profile_data(sf: SFCLI, components: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
     cfg = config.get("analysis", {})
     if not cfg.get("data_profile_enabled", False):
-        return {"enabled": False, "available": False, "note": "Opt-in only. Enable with --profile-data."}
+        return {"enabled": False, "available": False, "note": "Recurso opcional. Ative com --profile-data."}
     sample = max(1, min(int(cfg.get("data_profile_sample_size", 200)), 2000))
     max_objects = max(1, int(cfg.get("data_profile_max_objects", 10)))
     max_fields = max(1, int(cfg.get("data_profile_max_fields_per_object", 25)))
@@ -293,18 +293,18 @@ def analyze_v3_intelligence(components: dict[str, Any], findings: list[Any]) -> 
         if high_null:
             findings.append(Finding(
                 id=f"V3DATA-{seq:04d}", category="data_quality", severity="medium",
-                title="Fields with very high null density in sampled data",
-                description=f"{len(high_null)} fields were at least 95% null in the configured sample.",
-                component="Data Model", recommendation="Review whether these fields are required, obsolete, conditionally populated, or missing expected integration/user input.", effort="Medium", confidence=0.8,
+                title="Campos com densidade muito alta de valores nulos na amostra",
+                description=f"{len(high_null)} campos apresentaram pelo menos 95% de valores nulos na amostra configurada.",
+                component="Modelo de dados", recommendation="Revise se esses campos são obrigatórios, obsoletos, preenchidos condicionalmente ou se falta a entrada esperada de integrações/usuários.", effort="Medium", confidence=0.8,
                 evidence=[Evidence("DATA_PROFILE_SAMPLE", "read-only sample", ", ".join(f"{x['field']}={x['null_percent']}%" for x in high_null[:30]), 0.8)]
             )); seq += 1
         skewed = [obj for obj in dq.get("objects", []) if obj.get("owner_skew", {}).get("potential_skew")]
         if skewed:
             findings.append(Finding(
                 id=f"V3PERF-{seq:04d}", category="performance", severity="medium",
-                title="Potential ownership skew detected in sampled data",
-                description=f"{len(skewed)} profiled object(s) had one owner holding at least 50% of sampled owned records.",
-                component="Data Model", recommendation="Validate ownership skew with a larger approved query and review sharing recalculation, locking and automation impact on high-volume objects.", effort="Medium", confidence=0.72,
+                title="Possível concentração de propriedade detectada na amostra",
+                description=f"{len(skewed)} objeto(s) analisado(s) tinham um proprietário com pelo menos 50% dos registros da amostra.",
+                component="Modelo de dados", recommendation="Valide a concentração com uma consulta maior aprovada e revise recálculo de compartilhamento, bloqueios e impacto da automação em objetos de alto volume.", effort="Medium", confidence=0.72,
                 evidence=[Evidence("DATA_PROFILE_SAMPLE", "OwnerId hashed sample", ", ".join(f"{x['object']}={x['owner_skew'].get('top_owner_share_percent')}%" for x in skewed[:30]), 0.72)]
             )); seq += 1
     apex = v3.get("apex_semantic_map", {})
@@ -312,26 +312,26 @@ def analyze_v3_intelligence(components: dict[str, Any], findings: list[Any]) -> 
     if hardcoded:
         findings.append(Finding(
             id=f"V3INT-{seq:04d}", category="integrations", severity="high",
-            title="Apex callout endpoints appear hardcoded",
-            description=f"{len(hardcoded)} setEndpoint() values do not use the callout: Named Credential syntax.",
-            component="Apex Callouts", recommendation="Review and migrate endpoint/authentication configuration to Named Credentials where appropriate.", effort="Medium", confidence=0.92,
+            title="Endpoints de callout Apex parecem fixos no código",
+            description=f"{len(hardcoded)} valor(es) de setEndpoint() não usam a sintaxe callout: de Named Credential.",
+            component="Callouts Apex", recommendation="Revise e migre a configuração de endpoint/autenticação para Named Credentials quando apropriado.", effort="Medium", confidence=0.92,
             evidence=[Evidence("APEX_STATIC_ANALYSIS", "setEndpoint", ", ".join(f"{x['class']}->{x['endpoint']}" for x in hardcoded[:20]), 0.92)]
         )); seq += 1
     dynamic = apex.get("dynamic_references", [])
     if dynamic:
         findings.append(Finding(
             id=f"V3ARC-{seq:04d}", category="architecture", severity="low",
-            title="Dynamic Apex references require manual dependency review",
-            description=f"{len(dynamic)} Type.forName-style dynamic references were detected; static dead-code analysis can undercount these dependencies.",
-            component="Apex", recommendation="Preserve these dynamic edges in removal/change reviews and validate configuration-driven class names before deleting candidates.", effort="Low", confidence=0.9,
+            title="Referências Apex dinâmicas exigem revisão manual de dependências",
+            description=f"Foram detectadas {len(dynamic)} referências dinâmicas no estilo Type.forName; a análise estática de código morto pode subestimar essas dependências.",
+            component="Apex", recommendation="Preserve essas relações dinâmicas nas revisões de remoção/mudança e valide nomes de classes vindos de configuração antes de excluir candidatos.", effort="Low", confidence=0.9,
             evidence=[Evidence("APEX_STATIC_ANALYSIS", "Type.forName", ", ".join(f"{x['class']}->{x['target']}" for x in dynamic[:20]), 0.9)]
         )); seq += 1
     high_risk = [x for x in v3.get("risk_and_debt", {}).get("top_change_risk", []) if x.get("change_risk_score", 0) >= 70]
     if high_risk:
         findings.append(Finding(
             id=f"V3ARC-{seq:04d}", category="architecture", severity="medium",
-            title="High change-risk dependency hotspots detected",
-            description=f"{len(high_risk)} components scored 70+ on the deterministic change-risk heuristic.", component="Dependency Graph",
-            recommendation="Require impact analysis and targeted regression tests before changing the highest-risk components.", effort="Medium", confidence=0.75,
+            title="Pontos críticos de dependência com alto risco de mudança detectados",
+            description=f"{len(high_risk)} componentes alcançaram 70 ou mais na heurística determinística de risco de mudança.", component="Grafo de dependências",
+            recommendation="Exija análise de impacto e testes de regressão direcionados antes de alterar os componentes de maior risco.", effort="Medium", confidence=0.75,
             evidence=[Evidence("DEPENDENCY_GRAPH", "change-risk", ", ".join(f"{x['component']}={x['change_risk_score']}" for x in high_risk[:20]), 0.75)]
         ))

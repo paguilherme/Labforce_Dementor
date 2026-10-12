@@ -1,6 +1,6 @@
 product:
   name: "Labforce Dementor for Salesforce"
-  version: "4.2.0"
+  version: "4.2.1"
 
 safety:
   mode: "CONTROLLED_READ_ONLY"
@@ -86,7 +86,7 @@ scoring:
     info: 0
 
 report:
-  title: "Salesforce Org Assessment"
-  confidentiality: "Confidential"
+  title: "Assessment da organização Salesforce"
+  confidentiality: "Confidencial"
   company_name: ""
   timezone: "America/Maceio"

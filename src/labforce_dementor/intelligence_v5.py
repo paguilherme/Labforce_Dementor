@@ -137,7 +137,7 @@ def select_tests(snapshot: dict[str, Any], changed_components: list[str], depth:
         "test_names": [x["test"] for x in ranked],
         "confidence": round(confidence, 2),
         "manual_review_required": True,
-        "note": "Selection is evidence-based but does not replace Salesforce dependency/runtime verification.",
+        "note": "A seleção se baseia em evidências, mas não substitui a verificação de dependências e execução no Salesforce.",
     }
 
 

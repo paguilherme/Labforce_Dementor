@@ -1,5 +1,15 @@
 # Changelog
 
+## 4.2.1 — 2026-10-12
+
+- Mostra o andamento do assessment em tempo real no terminal, com fase atual, atividade e duração.
+- Mantém saída linear e estável em logs e ambientes de CI.
+- Adiciona `--no-progress` para execuções silenciosas ou integrações que não desejem o indicador.
+- Expõe progresso das consultas operacionais, recuperação de metadados, análise, relatórios e integridade.
+- Padroniza os relatórios JSON, Markdown, HTML, PDF e de impacto para pt-BR.
+- Adiciona rótulos em português para categoria, severidade, esforço e inventário sem quebrar os enums técnicos existentes.
+- Traduz títulos, descrições e recomendações dos achados determinísticos.
+
 ## 4.2.0 — 2026-10-12
 
 - Publica o pacote Python com o nome de distribuição `labforce-dementor`.

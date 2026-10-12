@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from .localization import localize_assessment
+
 
 COMPANY_NAME = "Labforce"
 SYSTEM_NAME = "Labforce Dementor"
@@ -47,7 +49,7 @@ def with_report_metadata(
     *,
     generated_at: datetime | None = None,
 ) -> dict[str, Any]:
-    branded = deepcopy(payload)
+    branded = localize_assessment(deepcopy(payload))
     branded["report_metadata"] = report_metadata(config, generated_at=generated_at)
     return branded
 

@@ -11,6 +11,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from .branding import footer_text, logo_data_uri, logo_path, report_metadata, with_report_metadata
 from .models import AssessmentResult
+from .localization import category_label, inventory_label, severity_label
 
 
 def _make_charts(data: dict[str, Any], output_dir: Path) -> dict[str, str]:
@@ -25,13 +26,14 @@ def _make_charts(data: dict[str, Any], output_dir: Path) -> dict[str, str]:
     categories = data["health"]["categories"]
     if categories:
         fig, ax = plt.subplots(figsize=(10, 6))
-        names = [n for n, v in categories.items() if v is not None]
-        values = [categories[n] for n in names]
+        category_rows = [(category_label(n), v) for n, v in categories.items() if v is not None]
+        names = [name for name, _ in category_rows]
+        values = [value for _, value in category_rows]
         if names:
             ax.barh(names, values)
         ax.set_xlim(0, 100)
-        ax.set_xlabel("Score")
-        ax.set_title("Health score by category")
+        ax.set_xlabel("Pontuação")
+        ax.set_title("Saúde por categoria")
         ax.invert_yaxis()
         fig.tight_layout()
         p = chart_dir / "health_scores.png"
@@ -41,9 +43,9 @@ def _make_charts(data: dict[str, Any], output_dir: Path) -> dict[str, str]:
 
     severity = data["health"]["findings_by_severity"]
     fig, ax = plt.subplots(figsize=(8, 5))
-    ax.bar(list(severity.keys()), list(severity.values()))
-    ax.set_ylabel("Findings")
-    ax.set_title("Findings by severity")
+    ax.bar([severity_label(k) for k in severity], list(severity.values()))
+    ax.set_ylabel("Achados")
+    ax.set_title("Achados por severidade")
     fig.tight_layout()
     p = chart_dir / "findings_by_severity.png"
     fig.savefig(p, dpi=160, bbox_inches="tight")
@@ -54,9 +56,9 @@ def _make_charts(data: dict[str, Any], output_dir: Path) -> dict[str, str]:
     if inventory:
         top = sorted(inventory.items(), key=lambda kv: kv[1] if isinstance(kv[1], (int, float)) else 0, reverse=True)[:12]
         fig, ax = plt.subplots(figsize=(10, 6))
-        ax.barh([k for k, _ in top], [v for _, v in top])
-        ax.set_xlabel("Count")
-        ax.set_title("Metadata inventory")
+        ax.barh([inventory_label(k) for k, _ in top], [v for _, v in top])
+        ax.set_xlabel("Quantidade")
+        ax.set_title("Inventário de metadados")
         ax.invert_yaxis()
         fig.tight_layout()
         p = chart_dir / "inventory.png"
@@ -71,8 +73,8 @@ def _make_charts(data: dict[str, Any], output_dir: Path) -> dict[str, str]:
         fig, ax = plt.subplots(figsize=(10, 6))
         ax.barh([x["name"] for x in reversed(cov_rows)], [x["coverage_percent"] for x in reversed(cov_rows)])
         ax.set_xlim(0, 100)
-        ax.set_xlabel("Coverage %")
-        ax.set_title("Lowest Apex coverage components")
+        ax.set_xlabel("Cobertura %")
+        ax.set_title("Componentes Apex com menor cobertura")
         fig.tight_layout()
         p = chart_dir / "apex_coverage.png"
         fig.savefig(p, dpi=160, bbox_inches="tight")
@@ -83,8 +85,8 @@ def _make_charts(data: dict[str, Any], output_dir: Path) -> dict[str, str]:
     if volumes:
         fig, ax = plt.subplots(figsize=(10, 6))
         ax.barh([x["object"] for x in reversed(volumes)], [x["record_count"] for x in reversed(volumes)])
-        ax.set_xlabel("Estimated record count")
-        ax.set_title("Largest queryable objects")
+        ax.set_xlabel("Quantidade estimada de registros")
+        ax.set_title("Maiores objetos consultáveis")
         fig.tight_layout()
         p = chart_dir / "data_volume.png"
         fig.savefig(p, dpi=160, bbox_inches="tight")
@@ -95,8 +97,8 @@ def _make_charts(data: dict[str, Any], output_dir: Path) -> dict[str, str]:
     if hotspots:
         fig, ax = plt.subplots(figsize=(10, 6))
         ax.barh([x["object"] for x in reversed(hotspots)], [x["automation_components"] for x in reversed(hotspots)])
-        ax.set_xlabel("Automation / validation components")
-        ax.set_title("Order-of-execution hotspots")
+        ax.set_xlabel("Componentes de automação/validação")
+        ax.set_title("Pontos críticos na ordem de execução")
         fig.tight_layout()
         p = chart_dir / "automation_hotspots.png"
         fig.savefig(p, dpi=160, bbox_inches="tight")
@@ -109,8 +111,8 @@ def _make_charts(data: dict[str, Any], output_dir: Path) -> dict[str, str]:
         fig, ax = plt.subplots(figsize=(10, 6))
         ax.barh([x["component"] for x in reversed(risk)], [x["change_risk_score"] for x in reversed(risk)])
         ax.set_xlim(0, 100)
-        ax.set_xlabel("Change risk score")
-        ax.set_title("Highest change-risk components")
+        ax.set_xlabel("Pontuação de risco da mudança")
+        ax.set_title("Componentes com maior risco de mudança")
         fig.tight_layout()
         p = chart_dir / "change_risk.png"
         fig.savefig(p, dpi=160, bbox_inches="tight")
@@ -121,8 +123,8 @@ def _make_charts(data: dict[str, Any], output_dir: Path) -> dict[str, str]:
     if apps:
         fig, ax = plt.subplots(figsize=(10, 6))
         ax.barh([x["app"] for x in reversed(apps)], [x["events"] for x in reversed(apps)])
-        ax.set_xlabel("Observed events")
-        ax.set_title("Application usage evidence")
+        ax.set_xlabel("Eventos observados")
+        ax.set_title("Evidências de uso das aplicações")
         fig.tight_layout()
         p = chart_dir / "app_usage.png"
         fig.savefig(p, dpi=160, bbox_inches="tight")
@@ -136,54 +138,54 @@ def _markdown(data: dict[str, Any], logo_reference: str = "assets/labforce-logo.
     metadata = data["report_metadata"]
     lines = [
         f"![Labforce]({logo_reference})", "", f"# {data['product']['name']}", "",
-        f"**Org:** {data['run'].get('target_org', '')}",
+        f"**Organização:** {data['run'].get('target_org', '')}",
         f"**Gerado em:** {metadata['generated_at_display']}", "",
-        f"## Overall Health: {h['overall']}/100", "",
-        "## Health by category", "",
-        "| Category | Score |", "|---|---:|",
+        f"## Saúde geral: {h['overall']}/100", "",
+        "## Saúde por categoria", "",
+        "| Categoria | Pontuação |", "|---|---:|",
     ]
     for category, score in h["categories"].items():
-        lines.append(f"| {category.replace('_', ' ').title()} | {score if score is not None else 'N/A'} |")
-    lines += ["", "## Findings", "", "| ID | Severity | Category | Component | Finding |", "|---|---|---|---|---|"]
+        lines.append(f"| {category_label(category)} | {score if score is not None else 'N/D'} |")
+    lines += ["", "## Achados", "", "| ID | Severidade | Categoria | Componente | Achado |", "|---|---|---|---|---|"]
     for f in data["findings"]:
-        lines.append(f"| {f['id']} | {f['severity'].upper()} | {f['category']} | {f.get('component','')} | {f['title']} |")
-    lines += ["", "## Inventory", "", "| Type | Count |", "|---|---:|"]
+        lines.append(f"| {f['id']} | {f.get('severity_label', severity_label(f['severity']))} | {f.get('category_label', category_label(f['category']))} | {f.get('component','')} | {f['title']} |")
+    lines += ["", "## Inventário", "", "| Tipo | Quantidade |", "|---|---:|"]
     for key, value in data.get("inventory", {}).items():
-        lines.append(f"| {key.replace('_',' ').title()} | {value} |")
+        lines.append(f"| {inventory_label(key)} | {value} |")
 
     ent = data.get("components", {}).get("intelligence", {}).get("enterprise", {})
     twin = ent.get("digital_twin", {})
     if twin:
-        lines += ["", "## Enterprise Intelligence", "",
-                  f"- Digital Twin: **{twin.get('nodes', 0)} nodes / {twin.get('edges', 0)} edges**",
-                  f"- Automation cycles: **{len(twin.get('automation_cycles', []))}**",
-                  f"- Articulation points: **{len(twin.get('articulation_points', []))}**"]
+        lines += ["", "## Inteligência empresarial", "",
+                  f"- Gêmeo digital: **{twin.get('nodes', 0)} nós / {twin.get('edges', 0)} arestas**",
+                  f"- Ciclos de automação: **{len(twin.get('automation_cycles', []))}**",
+                  f"- Pontos de articulação: **{len(twin.get('articulation_points', []))}**"]
         readiness = ent.get("competitive_readiness", {}).get("overall_readiness_percent")
         if readiness is not None:
-            lines.append(f"- Internal competitive capability readiness: **{readiness}%**")
+            lines.append(f"- Prontidão interna das capacidades: **{readiness}%**")
         eq = ent.get("evidence_quality", {})
         if eq:
-            lines.append(f"- Findings with evidence: **{eq.get('evidence_coverage_percent')}%**")
+            lines.append(f"- Achados com evidências: **{eq.get('evidence_coverage_percent')}%**")
         plan = ent.get("remediation_plan", {})
         if plan:
-            lines += ["", "### Remediation priorities", "", "| Priority | Count |", "|---|---:|"]
+            lines += ["", "### Prioridades de remediação", "", "| Prioridade | Quantidade |", "|---|---:|"]
             for prio in ("P0","P1","P2","P3"):
                 lines.append(f"| {prio} | {plan.get('by_priority', {}).get(prio, 0)} |")
         advisor = ent.get("architecture_advisor", {}).get("recommendations", [])
         if advisor:
-            lines += ["", "### Architecture Advisor", ""]
+            lines += ["", "### Orientador de arquitetura", ""]
             for rec in advisor[:12]:
                 lines.append(f"- **{rec.get('priority','')} — {rec.get('title','')}**: {rec.get('rationale','')}")
     v7 = data.get("components", {}).get("intelligence", {}).get("v7", {})
     if v7:
         ready = v7.get("final_readiness", {})
-        lines += ["", "## Final Intelligence Layer", "",
-                  f"- Product-grade core readiness: **{ready.get('readiness_percent','N/A')}%** ({ready.get('engine_status','N/A')})",
-                  f"- Flow deep-analysis: **{v7.get('flow_quality',{}).get('flows_analyzed',0)} flow(s)**",
-                  f"- Apex deep-analysis: **{v7.get('apex_quality',{}).get('components_analyzed',0)} component(s)**",
-                  f"- Transaction collision candidates: **{len(v7.get('order_of_execution_graph',{}).get('collision_candidates',[]))}**",
-                  f"- Runtime risk: **{v7.get('runtime_health',{}).get('runtime_risk_score','N/A')}/100**",
-                  f"- Integration risk: **{v7.get('integration_health',{}).get('health_risk_score','N/A')}/100**"]
+        lines += ["", "## Camada final de inteligência", "",
+                  f"- Prontidão do núcleo: **{ready.get('readiness_percent','N/D')}%** ({ready.get('engine_status_label', ready.get('engine_status','N/D'))})",
+                  f"- Análise aprofundada de Flow: **{v7.get('flow_quality',{}).get('flows_analyzed',0)} Flow(s)**",
+                  f"- Análise aprofundada de Apex: **{v7.get('apex_quality',{}).get('components_analyzed',0)} componente(s)**",
+                  f"- Candidatos a colisão transacional: **{len(v7.get('order_of_execution_graph',{}).get('collision_candidates',[]))}**",
+                  f"- Risco de execução: **{v7.get('runtime_health',{}).get('runtime_risk_score','N/D')}/100**",
+                  f"- Risco de integração: **{v7.get('integration_health',{}).get('health_risk_score','N/D')}/100**"]
     lines += ["", "---", footer_text(metadata), ""]
     return "\n".join(lines) + "\n"
 

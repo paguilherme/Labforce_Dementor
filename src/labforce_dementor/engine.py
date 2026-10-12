@@ -7,7 +7,7 @@ import time
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .analyzer import analyze, analyze_v2_intelligence, calculate_health
 from .models import AssessmentResult
@@ -25,6 +25,12 @@ from .intelligence_v7 import build_v7_intelligence, analyze_v7_intelligence, fin
 
 
 ACTIVE_DEPLOY_STATUSES = {"pending", "inprogress", "queued", "canceling"}
+ProgressCallback = Callable[[str, str, str | None], None]
+
+
+def _emit_progress(progress: ProgressCallback | None, stage: str, status: str, detail: str | None = None) -> None:
+    if progress is not None:
+        progress(stage, status, detail)
 
 
 def _unwrap(payload: dict[str, Any]) -> Any:
@@ -162,7 +168,7 @@ def _wait_for_deploys(sf: SFCLI, config: dict[str, Any], audit: dict[str, Any], 
     return False
 
 
-def _query_runtime(sf: SFCLI) -> dict[str, Any]:
+def _query_runtime(sf: SFCLI, progress: ProgressCallback | None = None) -> dict[str, Any]:
     queries = {
         "organization": (False, "SELECT Id, Name, OrganizationType, InstanceName, IsSandbox FROM Organization LIMIT 1"),
         "users": (False, "SELECT IsActive, COUNT(Id) total FROM User GROUP BY IsActive"),
@@ -173,7 +179,18 @@ def _query_runtime(sf: SFCLI) -> dict[str, Any]:
         "apex_triggers_tooling": (True, "SELECT Id, Name, ApiVersion, Status, NamespacePrefix, LengthWithoutComments, CreatedDate, LastModifiedDate FROM ApexTrigger ORDER BY Name"),
     }
     result: dict[str, Any] = {}
-    for name, (tooling, soql) in queries.items():
+    labels = {
+        "organization": "Organização",
+        "users": "Usuários",
+        "async_apex_recent": "Apex assíncrono",
+        "scheduled_jobs": "Jobs agendados",
+        "api_total_usage_logs": "Uso de API",
+        "apex_classes_tooling": "Classes Apex",
+        "apex_triggers_tooling": "Triggers Apex",
+    }
+    total = len(queries)
+    for index, (name, (tooling, soql)) in enumerate(queries.items(), start=1):
+        _emit_progress(progress, "runtime_collection", "update", f"{labels[name]} ({index}/{total})")
         q = sf.query(soql, tooling=tooling, tolerate_failure=True)
         if q.get("ok"):
             result[name] = _unwrap(q["payload"])
@@ -207,7 +224,17 @@ def _copy_config_for_run(config_path: str | None, output_dir: Path) -> None:
         shutil.copy2(config_path, output_dir / "assessment-config.yml")
 
 
-def run_assessment(target_org: str, work_dir: Path, output_dir: Path, config: dict[str, Any], *, wait_for_deploy_seconds: int = 0, source_dir: Path | None = None, resume: bool = False) -> dict[str, Any]:
+def run_assessment(
+    target_org: str,
+    work_dir: Path,
+    output_dir: Path,
+    config: dict[str, Any],
+    *,
+    wait_for_deploy_seconds: int = 0,
+    source_dir: Path | None = None,
+    resume: bool = False,
+    progress: ProgressCallback | None = None,
+) -> dict[str, Any]:
     started = datetime.now(timezone.utc)
     work_dir.mkdir(parents=True, exist_ok=True)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -229,21 +256,35 @@ def run_assessment(target_org: str, work_dir: Path, output_dir: Path, config: di
     SFCLI.ensure_available()
     sf = SFCLI(target_org, work_dir, audit, config)
 
+    _emit_progress(progress, "preflight", "start", "Conferindo Salesforce CLI e autenticação")
     checkpoint.mark("preflight", "running")
     org = _normalize_org(sf.org_display())
     limits_before = _normalize_limits(sf.limits())
     _check_api_headroom(limits_before, config)
     checkpoint.mark("preflight", "done")
+    org_label = str(org.get("name") or org.get("username") or target_org)
+    _emit_progress(progress, "preflight", "done", org_label)
 
+    _emit_progress(progress, "runtime_collection", "start", "Consultando sinais da organização")
     checkpoint.mark("runtime_collection", "running")
-    runtime = _query_runtime(sf)
+    runtime = _query_runtime(sf, progress)
+    _emit_progress(progress, "runtime_collection", "update", "Inteligência operacional expandida")
     runtime_v2 = collect_v2_runtime(sf, config)
     checkpoint.mark("runtime_collection", "done")
+    _emit_progress(progress, "runtime_collection", "done", f"{len(runtime)} grupos básicos coletados")
     limits_mid = _normalize_limits(sf.limits())
     budget_hit, budget_state = _budget_exceeded(limits_before, limits_mid, config)
     audit["api_budget_runtime_phase"] = budget_state
 
-    can_retrieve = (not budget_hit) and _wait_for_deploys(sf, config, audit, max_wait_seconds=wait_for_deploy_seconds)
+    _emit_progress(progress, "deployment_guard", "start", "Consultando atividades de deploy/validate")
+    if budget_hit:
+        can_retrieve = False
+        _emit_progress(progress, "deployment_guard", "skipped", "Limite seguro de API já atingido")
+    else:
+        can_retrieve = _wait_for_deploys(sf, config, audit, max_wait_seconds=wait_for_deploy_seconds)
+        active_deploys = len(audit.get("deployment_guard", {}).get("active", []))
+        deploy_detail = "Nenhum deploy ativo" if not active_deploys else f"{active_deploys} atividade(s) ativa(s)"
+        _emit_progress(progress, "deployment_guard", "done", deploy_detail)
     manifest_dir = work_dir / "manifest"
     manifest_path = manifest_dir / "package.xml"
     strict_mode = str(config["safety"].get("mode", "")).upper() == "STRICT_READ_ONLY"
@@ -263,8 +304,10 @@ def run_assessment(target_org: str, work_dir: Path, output_dir: Path, config: di
         audit["metadata_source"] = "checkpoint_resume"
         audit["resumed_from_checkpoint"] = True
 
+    _emit_progress(progress, "metadata_retrieve", "start", "Definindo origem dos metadados")
     if can_retrieve:
         checkpoint.mark("metadata_retrieve", "running")
+        _emit_progress(progress, "metadata_retrieve", "update", "Gerando manifesto package.xml")
         sf.generate_manifest(config["metadata"]["types"], manifest_dir, int(config["metadata"].get("list_metadata_batch_size", 10)))
         limits_after_manifest = _normalize_limits(sf.limits())
         manifest_budget_hit, manifest_budget_state = _budget_exceeded(limits_before, limits_after_manifest, config)
@@ -278,18 +321,30 @@ def run_assessment(target_org: str, work_dir: Path, output_dir: Path, config: di
             raise RuntimeError("Manifest generation completed but package.xml was not found.")
         if manifest_budget_hit:
             audit.setdefault("read_errors", []).append({"phase": "metadata_retrieve", "message": "Skipped because configured API budget was exceeded during metadata discovery."})
+            _emit_progress(progress, "metadata_retrieve", "skipped", "Limite seguro de API atingido após o manifesto")
         else:
+            _emit_progress(progress, "metadata_retrieve", "update", "Baixando snapshot read-only da org")
             sf.retrieve(manifest_path)
             audit["metadata_retrieve_executed"] = True
             checkpoint.mark("metadata_retrieve", "done", manifest=str(manifest_path))
+            _emit_progress(progress, "metadata_retrieve", "done", "Snapshot Salesforce recuperado")
+    elif audit.get("metadata_source") == "checkpoint_resume":
+        _emit_progress(progress, "metadata_retrieve", "done", "Snapshot reutilizado do checkpoint")
     elif source_dir is None and not strict_mode:
         reason = "configured API budget was reached" if budget_hit else "an active deploy/validate was detected and wait window was zero or expired"
         audit.setdefault("read_errors", []).append({
             "phase": "metadata_retrieve",
             "message": f"Skipped because {reason}."
         })
+        safe_reason = "Limite seguro de API atingido" if budget_hit else "Deploy ativo; recuperação evitada"
+        _emit_progress(progress, "metadata_retrieve", "skipped", safe_reason)
+    elif source_dir is not None:
+        _emit_progress(progress, "metadata_retrieve", "done", "Usando snapshot local informado")
+    elif strict_mode:
+        _emit_progress(progress, "metadata_retrieve", "skipped", "STRICT_READ_ONLY sem snapshot local")
 
     source_root = source_dir.resolve() if source_dir is not None else (work_dir / "force-app" / "main" / "default")
+    _emit_progress(progress, "static_analysis", "start", "Lendo componentes do snapshot")
     checkpoint.mark("static_analysis", "running", source_root=str(source_root))
     components = parse_source(source_root)
     components["runtime"] = runtime
@@ -298,10 +353,12 @@ def run_assessment(target_org: str, work_dir: Path, output_dir: Path, config: di
 
     code_analyzer_path = output_dir / "code-analyzer.json"
     if config["analysis"].get("run_code_analyzer", True) and any(source_root.rglob("*.cls")):
+        _emit_progress(progress, "static_analysis", "update", "Executando Salesforce Code Analyzer")
         ca_exec = sf.code_analyzer(source_root, code_analyzer_path, config["analysis"].get("code_analyzer_rule_selector", "Recommended"))
         if not ca_exec.get("ok") and not code_analyzer_path.exists():
             audit.setdefault("read_errors", []).append({"phase": "code_analyzer", "message": ca_exec.get("error")})
 
+    _emit_progress(progress, "static_analysis", "update", "Correlacionando arquitetura, riscos e dependências")
     findings, health, dependencies, ca = analyze(components, config, code_analyzer_path if code_analyzer_path.exists() else None)
     components["intelligence"] = build_intelligence(components, dependencies, runtime_v2, config)
     analyze_v2_intelligence(components, findings)
@@ -322,6 +379,7 @@ def run_assessment(target_org: str, work_dir: Path, output_dir: Path, config: di
     dependencies = components["intelligence"]["enterprise"]["digital_twin"]["normalized_edges"]
     _remove_source_bodies(components)
     checkpoint.mark("static_analysis", "done")
+    _emit_progress(progress, "static_analysis", "done", f"{len(findings)} achado(s); health score {health.get('overall', 0)}/100")
     limits_after = _normalize_limits(sf.limits())
     audit["api_budget"] = _api_budget(limits_before, limits_after, config)
 
@@ -357,9 +415,12 @@ def run_assessment(target_org: str, work_dir: Path, output_dir: Path, config: di
     if not payload_validation["valid"]:
         raise RuntimeError("Assessment payload validation failed: " + "; ".join(payload_validation["errors"]))
 
+    _emit_progress(progress, "report_generation", "start", "Renderizando JSON, Markdown, HTML e PDF")
     checkpoint.mark("report_generation", "running")
     reports = generate_reports(result, output_dir, config)
     checkpoint.mark("report_generation", "done")
+    _emit_progress(progress, "report_generation", "done", "Relatórios gerados")
+    _emit_progress(progress, "integrity", "start", "Calculando hashes SHA-256")
     integrity = integrity_manifest(output_dir, exclude_names={"integrity-manifest.json", "checkpoint.json", "run-manifest.json"})
     (output_dir / "integrity-manifest.json").write_text(json.dumps(integrity, indent=2, ensure_ascii=False), encoding="utf-8")
     manifest = {
@@ -375,4 +436,5 @@ def run_assessment(target_org: str, work_dir: Path, output_dir: Path, config: di
     }
     (output_dir / "run-manifest.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
     checkpoint.mark("complete", "done")
+    _emit_progress(progress, "integrity", "done", f"{integrity.get('count', 0)} artefato(s) verificado(s)")
     return manifest
