@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "labforce-dementor"
-version = "4.2.0"
+version = "4.2.1"
 description = "Assessment read-only e inteligência de arquitetura para organizações Salesforce"
 readme = "PYPI_README.md"
 requires-python = ">=3.11"
