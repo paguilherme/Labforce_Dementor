@@ -119,7 +119,7 @@ def effective_access_v4(components: dict[str, Any], runtime_v2: dict[str, Any]) 
     normalized=[]
     for uid, d in users.items():
         normalized.append({"user_id":uid,"permission_sets":sorted(set(d["permission_sets"])),"critical_user_permissions":sorted(d["critical_user_permissions"]),"object_modify_all":sorted(x for x in d["object_modify_all"] if x),"editable_fields_count":len(d["field_edit"])})
-    return {"users": normalized, "users_analyzed": len(normalized), "note":"Profile/PSG/muting completeness depends on retrieved metadata and runtime query availability."}
+    return {"users": normalized, "users_analyzed": len(normalized), "note":"A completude de Profile/PSG/muting depende dos metadados recuperados e da disponibilidade das consultas em execução."}
 
 
 def sharing_model(components: dict[str, Any]) -> dict[str, Any]:
