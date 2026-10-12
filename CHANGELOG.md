@@ -2,6 +2,10 @@
 
 ## 4.2.1 — 2026-10-12
 
+- Oferece o complemento de IA ao final do `run` em terminais interativos, inclusive quando o PDF não é gerado.
+- Adiciona `ai-report --assessment` para iniciar o fluxo guiado usando um JSON existente, sem repetir a coleta Salesforce.
+- Exige escolha de provedor, modelo, dados e credencial, prévia sanitizada e frase de autorização exata antes de chamar IA.
+- Preserva o assessment em cancelamentos e erros e adiciona `--no-ai-prompt` para pular a oferta; sessões não interativas não chamam IA.
 - Mostra o andamento do assessment em tempo real no terminal, com fase atual, atividade e duração.
 - Mantém saída linear e estável em logs e ambientes de CI.
 - Adiciona `--no-progress` para execuções silenciosas ou integrações que não desejem o indicador.
