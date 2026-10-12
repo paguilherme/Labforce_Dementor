@@ -158,7 +158,7 @@ def build_order_of_execution_graph(components: dict[str, Any], dependencies: lis
         "collision_candidates": collisions[:100],
         "trigger_events": dict(trigger_events),
         "graph_edges_added": len(graph_edges),
-        "interpretation": "Phase topology is deterministic; exact intra-phase ordering between independent automations can remain platform/runtime dependent and must not be inferred from list order.",
+        "interpretation": "A topologia das fases é determinística; a ordem exata dentro de uma fase entre automações independentes pode depender da plataforma/execução e não deve ser inferida pela ordem da lista.",
     }
 
 
@@ -321,7 +321,7 @@ def build_test_intelligence(components: dict[str, Any], runtime_v2: dict[str, An
         "coverage_available": bool(coverage_rows), "components": rows,
         "coverage_below_75": [x for x in rows if isinstance(x["coverage_percent"], (int, float)) and x["coverage_percent"] < 75],
         "without_direct_test_mapping": [x for x in rows if not x["direct_test_references"]],
-        "note": "Direct test mapping is static call/reference evidence; Salesforce runtime coverage remains the authoritative coverage signal when available.",
+        "note": "O mapeamento direto de testes é uma evidência estática de chamadas/referências; a cobertura em execução do Salesforce permanece a fonte autoritativa quando disponível.",
     }
 
 
@@ -383,7 +383,7 @@ def build_runtime_health(components: dict[str, Any], runtime_v2: dict[str, Any])
         "app_usage": events.get("app_usage", [])[:100], "app_user_usage": events.get("app_user_usage", [])[:500],
         "api_clients": events.get("api_clients", [])[:100],
         "coverage": coverage,
-        "interpretation": "Unavailable telemetry increases uncertainty, not health. Runtime risk is conservative and evidence-aware.",
+        "interpretation": "Telemetria indisponível aumenta a incerteza, não a saúde. O risco de execução é conservador e considera as evidências.",
     }
 
 
@@ -460,22 +460,22 @@ def analyze_v7_intelligence(components: dict[str, Any], findings: list[Any]) -> 
     seq = 1
     collisions = [x for x in v7.get("order_of_execution_graph", {}).get("collision_candidates", []) if x.get("collision_score", 0) >= 60]
     if collisions:
-        findings.append(Finding(id=f"V7AUTO-{seq:04d}", category="automation", severity="high", title="High transaction automation collision potential", description=f"{len(collisions)} object(s) have multiple mutating automation actors across record-save phases.", component="Automation Architecture", recommendation="Review order-of-execution interactions, recursion guards, conflicting writes and regression tests on these objects.", effort="High", confidence=0.9, evidence=[Evidence("ORDER_OF_EXECUTION", "metadata topology", ", ".join(f"{x['object']}={x['collision_score']}" for x in collisions[:20]), 0.9)])); seq += 1
+        findings.append(Finding(id=f"V7AUTO-{seq:04d}", category="automation", severity="high", title="Alto potencial de colisão entre automações na transação", description=f"{len(collisions)} objeto(s) possuem múltiplas automações que alteram dados em diferentes fases do salvamento.", component="Arquitetura de automação", recommendation="Revise interações da ordem de execução, proteções contra recursão, gravações conflitantes e testes de regressão nesses objetos.", effort="High", confidence=0.9, evidence=[Evidence("ORDER_OF_EXECUTION", "topologia de metadados", ", ".join(f"{x['object']}={x['collision_score']}" for x in collisions[:20]), 0.9)])); seq += 1
     loop_risks = v7.get("flow_quality", {}).get("loop_operation_candidates", [])
     if loop_risks:
-        findings.append(Finding(id=f"V7FLOW-{seq:04d}", category="automation", severity="high", title="Flow operations reachable from loop paths", description=f"{len(loop_risks)} flow(s) contain record/action operations reachable from loop elements.", component="Flows", recommendation="Inspect loop paths and move record/query/callout operations outside loops when semantics allow; add bulk-volume tests.", effort="Medium", confidence=0.82, evidence=[Evidence("FLOW_XML_GRAPH", "loop traversal", ", ".join(str(x.get('flow')) for x in loop_risks[:30]), 0.82)])); seq += 1
+        findings.append(Finding(id=f"V7FLOW-{seq:04d}", category="automation", severity="high", title="Operações de Flow alcançáveis a partir de loops", description=f"{len(loop_risks)} Flow(s) contêm operações de registro/ação alcançáveis a partir de elementos de loop.", component="Flows", recommendation="Inspecione os caminhos dos loops e mova operações de registro, consulta e callout para fora deles quando a semântica permitir; adicione testes de volume.", effort="Medium", confidence=0.82, evidence=[Evidence("FLOW_XML_GRAPH", "percurso do loop", ", ".join(str(x.get('flow')) for x in loop_risks[:30]), 0.82)])); seq += 1
     missing_fault = v7.get("flow_quality", {}).get("missing_fault_handling_candidates", [])
     if missing_fault:
-        findings.append(Finding(id=f"V7FLOW-{seq:04d}", category="automation", severity="medium", title="Flow operations without visible fault connectors", description=f"{len(missing_fault)} flow(s) execute records/actions without a detected fault connector.", component="Flows", recommendation="Review fault paths and implement explicit error handling/telemetry for business-critical automations.", effort="Medium", confidence=0.78, evidence=[Evidence("FLOW_XML", "faultConnector", ", ".join(str(x.get('flow')) for x in missing_fault[:30]), 0.78)])); seq += 1
+        findings.append(Finding(id=f"V7FLOW-{seq:04d}", category="automation", severity="medium", title="Operações de Flow sem conectores de falha visíveis", description=f"{len(missing_fault)} Flow(s) executam registros/ações sem um conector de falha detectado.", component="Flows", recommendation="Revise os caminhos de falha e implemente tratamento explícito de erros e telemetria nas automações críticas ao negócio.", effort="Medium", confidence=0.78, evidence=[Evidence("FLOW_XML", "faultConnector", ", ".join(str(x.get('flow')) for x in missing_fault[:30]), 0.78)])); seq += 1
     apex_loops = v7.get("apex_quality", {}).get("soql_in_loop_candidates", []) + v7.get("apex_quality", {}).get("dml_in_loop_candidates", [])
     if apex_loops:
-        findings.append(Finding(id=f"V7APEX-{seq:04d}", category="performance", severity="high", title="Potential SOQL/DML inside Apex loop scope", description=f"{len({x.get('component') for x in apex_loops})} Apex component(s) matched the conservative loop-proximity heuristic.", component="Apex", recommendation="Validate each candidate with Code Analyzer/AST review and bulkify confirmed query/DML-in-loop logic.", effort="Medium", confidence=0.72, evidence=[Evidence("APEX_STATIC_HEURISTIC", "loop proximity", ", ".join(sorted({str(x.get('component')) for x in apex_loops})[:30]), 0.72)])); seq += 1
+        findings.append(Finding(id=f"V7APEX-{seq:04d}", category="performance", severity="high", title="Possível SOQL/DML dentro do escopo de loop Apex", description=f"{len({x.get('component') for x in apex_loops})} componente(s) Apex corresponderam à heurística conservadora de proximidade de loop.", component="Apex", recommendation="Valide cada candidato com Code Analyzer/análise AST e bulkifique as consultas ou DML em loop confirmados.", effort="Medium", confidence=0.72, evidence=[Evidence("APEX_STATIC_HEURISTIC", "proximidade de loop", ", ".join(sorted({str(x.get('component')) for x in apex_loops})[:30]), 0.72)])); seq += 1
     test_gaps = v7.get("test_intelligence", {}).get("coverage_below_75", [])
     if test_gaps:
-        findings.append(Finding(id=f"V7TEST-{seq:04d}", category="testing", severity="high", title="Apex runtime coverage below deployment baseline", description=f"{len(test_gaps)} covered Apex component(s) are below 75% aggregate coverage.", component="Apex Tests", recommendation="Raise targeted coverage with behavior-focused tests; prioritize structurally critical components first.", effort="Medium", confidence=0.99, evidence=[Evidence("APEX_CODE_COVERAGE_AGGREGATE", "runtime coverage", ", ".join(f"{x['component']}={x['coverage_percent']}%" for x in test_gaps[:30]), 0.99)])); seq += 1
+        findings.append(Finding(id=f"V7TEST-{seq:04d}", category="testing", severity="high", title="Cobertura Apex em execução abaixo da referência de implantação", description=f"{len(test_gaps)} componente(s) Apex estão abaixo de 75% de cobertura agregada.", component="Testes Apex", recommendation="Aumente a cobertura direcionada com testes orientados ao comportamento; priorize primeiro os componentes estruturalmente críticos.", effort="Medium", confidence=0.99, evidence=[Evidence("APEX_CODE_COVERAGE_AGGREGATE", "cobertura em execução", ", ".join(f"{x['component']}={x['coverage_percent']}%" for x in test_gaps[:30]), 0.99)])); seq += 1
     runtime = v7.get("runtime_health", {})
     if runtime.get("signals", {}).get("failed_async_jobs_30d", 0) > 0:
-        findings.append(Finding(id=f"V7OBS-{seq:04d}", category="observability", severity="medium", title="Recent failed asynchronous Apex jobs detected", description=f"{runtime['signals']['failed_async_jobs_30d']} failed/error async job(s) were observed in the last 30 days.", component="Async Apex", recommendation="Correlate recurring failures with owning classes/integrations, establish alerting and verify retry/idempotency behavior.", effort="Medium", confidence=0.99, evidence=[Evidence("ASYNC_APEX_JOB", "read-only runtime query", json.dumps(runtime.get('failed_components', [])[:20], ensure_ascii=False), 0.99)])); seq += 1
+        findings.append(Finding(id=f"V7OBS-{seq:04d}", category="observability", severity="medium", title="Falhas recentes em trabalhos Apex assíncronos detectadas", description=f"Foram observados {runtime['signals']['failed_async_jobs_30d']} trabalhos assíncronos com falha/erro nos últimos 30 dias.", component="Apex assíncrono", recommendation="Correlacione falhas recorrentes com as classes/integrações responsáveis, estabeleça alertas e verifique o comportamento de repetição e idempotência.", effort="Medium", confidence=0.99, evidence=[Evidence("ASYNC_APEX_JOB", "consulta de execução somente leitura", json.dumps(runtime.get('failed_components', [])[:20], ensure_ascii=False), 0.99)])); seq += 1
 
 
 def simulate_change(snapshot: dict[str, Any], component: str, operation: str = "change", depth: int = 4) -> dict[str, Any]:
@@ -520,7 +520,7 @@ def simulate_change(snapshot: dict[str, Any], component: str, operation: str = "
         "blast_radius": len(affected), "affected_by_type": dict(sorted(by_type.items())),
         "breaking_paths": sorted(paths, key=lambda x: (x["depth"], x["dependent"]))[:2000],
         "related_findings": related[:500], "change_risk_score": score, "risk": risk,
-        "recommendation": "DO NOT REMOVE WITHOUT MIGRATION" if operation in {"remove", "deprecate"} and risk in {"HIGH", "CRITICAL"} else "PROCEED WITH CONTROLLED VALIDATION",
+        "recommendation": "NÃO REMOVER SEM MIGRAÇÃO" if operation in {"remove", "deprecate"} and risk in {"HIGH", "CRITICAL"} else "PROSSEGUIR COM VALIDAÇÃO CONTROLADA",
         "migration_plan": plan, "mutation_executed": False,
     }
 
@@ -573,4 +573,5 @@ def final_readiness(snapshot: dict[str, Any]) -> dict[str, Any]:
         "read_only": snapshot.get("audit", {}).get("dml_executed", 0) == 0 and snapshot.get("audit", {}).get("metadata_deployments", 0) == 0,
     }
     ready = sum(1 for v in checks.values() if v)
-    return {"checks": checks, "ready_checks": ready, "total_checks": len(checks), "readiness_percent": round(ready / len(checks) * 100, 1), "engine_status": "PRODUCT_GRADE_CORE" if ready == len(checks) else "PARTIAL", "note": "Runtime/data completeness still depends on Salesforce edition, permissions, telemetry and opt-in profiling."}
+    complete = ready == len(checks)
+    return {"checks": checks, "ready_checks": ready, "total_checks": len(checks), "readiness_percent": round(ready / len(checks) * 100, 1), "engine_status": "PRODUCT_GRADE_CORE" if complete else "PARTIAL", "engine_status_label": "Núcleo pronto para produção" if complete else "Parcial", "note": "A completude de execução e dados ainda depende da edição do Salesforce, permissões, telemetria e perfil de dados opcional."}
