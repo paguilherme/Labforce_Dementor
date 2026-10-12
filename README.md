@@ -1,4 +1,4 @@
-# Labforce Dementor for Salesforce v4.2.0
+# Labforce Dementor for Salesforce v4.2.1
 
 O diagnóstico continua determinístico e funciona sem IA. A versão 4.1 adiciona um complemento de IA opcional, separado e sujeito à autorização explícita do usuário. A versão 4.2 entrega o pacote instalável e o comando curto `dementor`.
 
@@ -21,7 +21,7 @@ O nome simples de distribuição `dementor` já pertence a um projeto de terceir
 Para instalar um wheel entregue diretamente pela Labforce:
 
 ```bash
-uv tool install ./labforce_dementor-4.2.0-py3-none-any.whl
+uv tool install ./labforce_dementor-4.2.1-py3-none-any.whl
 ```
 
 ## Complemento opcional por IA
@@ -55,7 +55,7 @@ O consentimento é preso ao hash do diagnóstico, provedor, modelo, escopos, pro
 
 ## Identidade dos relatórios
 
-Os relatórios JSON, Markdown, HTML e PDF registram a empresa `Labforce`, o sistema `Labforce Dementor` e a data/hora de geração. Os formatos visuais usam no topo o ativo WebP extraído da UI da Labforce Base e incluem o mesmo registro no rodapé.
+Os dados humanos do assessment e os relatórios JSON, Markdown, HTML e PDF são gerados em português (pt-BR). Identificadores técnicos, nomes de componentes e enums estáveis são preservados para integrações. Todos os relatórios registram a empresa `Labforce`, o sistema `Labforce Dementor` e a data/hora de geração. Os formatos visuais usam no topo o ativo WebP extraído da UI da Labforce Base e incluem o mesmo registro no rodapé.
 
 ---
 
