@@ -1,0 +1,92 @@
+product:
+  name: "Labforce Dementor for Salesforce"
+  version: "4.2.0"
+
+safety:
+  mode: "CONTROLLED_READ_ONLY"
+  pause_metadata_if_deploy_active: true
+  fail_if_deploy_status_unknown: false
+  max_api_budget_percent_of_remaining: 5.0
+  stop_if_api_remaining_percent_below: 20.0
+  max_retries: 3
+  retry_base_seconds: 1.5
+  min_seconds_between_cli_calls: 0.15
+
+metadata:
+  list_metadata_batch_size: 10
+  types:
+    - ApexClass
+    - ApexTrigger
+    - ApexPage
+    - AuraDefinitionBundle
+    - LightningComponentBundle
+    - CustomApplication
+    - CustomObject
+    - Layout
+    - FlexiPage
+    - Flow
+    - Workflow
+    - ApprovalProcess
+    - PermissionSet
+    - PermissionSetGroup
+    - Profile
+    - SharingRules
+    - CustomPermission
+    - ConnectedApp
+    - NamedCredential
+    - ExternalCredential
+    - AuthProvider
+    - RemoteSiteSetting
+    - CorsWhitelistOrigin
+    - CSPTrustedSite
+    - CustomMetadata
+    - CustomLabels
+    - ReportType
+    - Report
+    - Dashboard
+
+analysis:
+  run_code_analyzer: true
+  code_analyzer_rule_selector: "Recommended"
+  unused_reference_confidence_threshold: 0.90
+  old_api_version_gap: 5
+  large_data_volume_threshold: 1000000
+  data_profile_enabled: false
+  data_profile_sample_size: 200
+  data_profile_max_objects: 10
+  data_profile_max_fields_per_object: 25
+  event_log_download_enabled: true
+  event_log_max_files: 12
+  event_log_types:
+    - ApiTotalUsage
+    - LightningPageView
+    - LightningInteraction
+    - URI
+  change_risk_high_threshold: 70
+  technical_debt_high_threshold: 70
+
+scoring:
+  weights:
+    security: 0.20
+    architecture: 0.12
+    performance: 0.12
+    automation: 0.10
+    apex: 0.10
+    testing: 0.08
+    integrations: 0.08
+    data_quality: 0.06
+    governance: 0.06
+    maintainability: 0.05
+    observability: 0.03
+  severity_penalty:
+    critical: 12
+    high: 6
+    medium: 2
+    low: 0.5
+    info: 0
+
+report:
+  title: "Salesforce Org Assessment"
+  confidentiality: "Confidential"
+  company_name: ""
+  timezone: "America/Maceio"

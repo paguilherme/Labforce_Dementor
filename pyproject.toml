@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "labforce-dementor"
+version = "4.2.0"
+description = "Assessment read-only e inteligência de arquitetura para organizações Salesforce"
+readme = "PYPI_README.md"
+requires-python = ">=3.11"
+authors = [{name = "Labforce", email = "contato@labforce.com.br"}]
+license = "LicenseRef-Labforce-Free-Proprietary-1.0"
+license-files = ["LICENSE"]
+keywords = ["salesforce", "assessment", "architecture", "governance", "security"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Intended Audience :: Information Technology",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Software Development :: Quality Assurance",
+]
+dependencies = [
+  "PyYAML>=6.0.2",
+  "Jinja2>=3.1.4",
+  "matplotlib>=3.9.0",
+  "networkx>=3.3",
+  "WeasyPrint>=66.0",
+]
+
+[project.urls]
+Homepage = "https://labforce.com.br/dementor/"
+Documentation = "https://labforce.com.br/dementor/documentacao/"
+
+[project.scripts]
+dementor = "labforce_dementor.entrypoint:main"
+labforce-dementor = "labforce_dementor.entrypoint:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+labforce_dementor = ["templates/*.j2", "assets/*.webp"]

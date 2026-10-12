@@ -1,0 +1,7 @@
+name: default
+fail_on:
+  new_critical_findings: 1
+  new_high_findings: null
+  health_drop_points: 10
+  max_change_risk: 90
+  drift: false

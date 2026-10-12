@@ -1,0 +1,7 @@
+name: strict-production
+fail_on:
+  new_critical_findings: 1
+  new_high_findings: 1
+  health_drop_points: 5
+  max_change_risk: 80
+  drift: true

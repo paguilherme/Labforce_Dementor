@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>{{ config.report.title }} — {{ data.run.target_org }}</title>
+<style>
+@page { size: A4; margin: 16mm 14mm 20mm; @bottom-center { content: "{{ branding.footer_text }} · Página " counter(page) " / " counter(pages); font-size: 8pt; color: #666; } }
+* { box-sizing: border-box; }
+body { font-family: Arial, Helvetica, sans-serif; color: #1f2937; font-size: 10pt; line-height: 1.38; }
+h1,h2,h3 { color: #111827; margin: 0 0 10px; }
+h1 { font-size: 28pt; } h2 { font-size: 18pt; border-bottom: 1px solid #ddd; padding-bottom: 5px; margin-top: 18px; } h3 { font-size: 13pt; margin-top: 14px; }
+.cover { min-height: 245mm; display: flex; flex-direction: column; justify-content: center; page-break-after: always; }
+.cover .brand { font-size: 12pt; font-weight: 700; letter-spacing: 1px; margin-bottom: 16px; }
+.brand-logo { width: 92mm; max-width: 80%; height: auto; margin-bottom: 20mm; }
+.cover .org { font-size: 16pt; margin: 8px 0; }
+.cover .meta { color: #4b5563; margin-top: 24px; }
+.score { font-size: 34pt; font-weight: 700; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.card { border: 1px solid #ddd; border-radius: 8px; padding: 12px; break-inside: avoid; }
+.metric { font-size: 20pt; font-weight: 700; }
+.small { color: #6b7280; font-size: 8.5pt; }
+table { width: 100%; border-collapse: collapse; margin: 8px 0 16px; font-size: 8.5pt; }
+th, td { border: 1px solid #ddd; padding: 6px; vertical-align: top; }
+th { background: #f3f4f6; text-align: left; }
+.sev-critical { font-weight: 700; } .sev-high { font-weight: 700; }
+img.chart { width: 100%; max-height: 125mm; object-fit: contain; }
+.page-break { page-break-before: always; }
+.finding { border-left: 4px solid #888; padding: 9px 12px; margin: 9px 0; break-inside: avoid; }
+pre { white-space: pre-wrap; word-wrap: break-word; background: #f6f8fa; padding: 8px; font-size: 8pt; }
+.document-footer { margin-top: 18mm; border-top: 1px solid #ddd; padding-top: 4mm; color: #6b7280; font-size: 8.5pt; }
+</style>
+</head>
+<body>
+<section class="cover">
+  <img class="brand-logo" src="{{ branding.logo_data_uri }}" alt="Labforce">
+  <div class="brand">LABFORCE DEMENTOR FOR SALESFORCE</div>
+  <h1>{{ config.report.title }}</h1>
+  <div class="org">{{ config.report.company_name or data.org.get('name') or data.run.target_org }}</div>
+  <div class="meta">
+    Target org: {{ data.run.target_org }}<br>
+    Assessment mode: {{ data.audit.get('mode') }}<br>
+    Started: {{ data.run.started_at }}<br>
+    Finished: {{ data.run.finished_at }}<br>
+    {{ config.report.confidentiality }}
+  </div>
+</section>
+
+<h2>Executive summary</h2>
+<div class="grid">
+  <div class="card"><div class="small">Overall Health</div><div class="score">{{ data.health.overall }}/100</div><div class="small">Evidence coverage: {{ data.health.overall_coverage_percent }}%</div></div>
+  <div class="card"><div class="small">Total Findings</div><div class="metric">{{ data.findings|length }}</div><div>{{ data.health.findings_by_severity.critical }} critical · {{ data.health.findings_by_severity.high }} high</div></div>
+</div>
+{% if charts.health %}<img class="chart" src="{{ charts.health }}">{% endif %}
+{% if charts.findings %}<img class="chart" src="{{ charts.findings }}">{% endif %}
+
+<h2>Health score</h2>
+<table><thead><tr><th>Category</th><th>Score</th></tr></thead><tbody>
+{% for k,v in data.health.categories.items() %}<tr><td>{{ k|replace('_',' ')|title }}</td><td>{{ v if v is not none else 'N/A' }}</td></tr>{% endfor %}
+</tbody></table>
+
+<h2>Org inventory</h2>
+{% if charts.inventory %}<img class="chart" src="{{ charts.inventory }}">{% endif %}
+<table><thead><tr><th>Metadata type</th><th>Count</th></tr></thead><tbody>
+{% for k,v in data.inventory.items() %}<tr><td>{{ k|replace('_',' ')|title }}</td><td>{{ v }}</td></tr>{% endfor %}
+</tbody></table>
+
+<h2>Top findings</h2>
+{% for f in data.findings[:40] %}
+<div class="finding sev-{{ f.severity }}">
+  <strong>{{ f.id }} · {{ f.severity|upper }} · {{ f.title }}</strong><br>
+  {% if f.component %}<span class="small">Component: {{ f.component }}</span><br>{% endif %}
+  {{ f.description }}<br>
+  {% if f.recommendation %}<strong>Recommendation:</strong> {{ f.recommendation }}{% endif %}
+  <div class="small">Confidence: {{ (f.confidence * 100)|round|int }}%</div>
+</div>
+{% endfor %}
+
+<div class="page-break"></div>
+<h2>Applications</h2>
+<table><thead><tr><th>Application</th><th>Label</th><th>Tabs / Navigation Items</th></tr></thead><tbody>
+{% for app in data.components.applications %}<tr><td>{{ app.api_name }}</td><td>{{ app.label }}</td><td>{{ app.tabs|join(', ') }}</td></tr>{% endfor %}
+</tbody></table>
+
+<h2>Objects and fields</h2>
+{% for obj in data.components.objects %}
+<h3>{{ obj.api_name }}{% if obj.label %} — {{ obj.label }}{% endif %}</h3>
+<div class="small">Fields: {{ obj.fields|length }} · Record Types: {{ obj.record_types|length }} · Validation Rules: {{ obj.validation_rules|length }} · Sharing: {{ obj.sharing_model }}</div>
+<table><thead><tr><th>Field</th><th>Type</th><th>Layouts</th><th>Manual candidate</th><th>Automation refs</th><th>Description</th></tr></thead><tbody>
+{% for fld in obj.fields %}<tr><td>{{ fld.api_name }}</td><td>{{ fld.type }}</td><td>{{ fld.layouts|join(', ') }}</td><td>{{ 'Yes' if fld.manual_candidate else 'No' }} ({{ (fld.manual_confidence*100)|round|int }}%)</td><td>{{ fld.references|length }}</td><td>{{ fld.description }}</td></tr>{% endfor %}
+</tbody></table>
+{% endfor %}
+
+<div class="page-break"></div>
+<h2>Automation</h2>
+<table><thead><tr><th>Flow</th><th>Status</th><th>Object</th><th>Trigger</th><th>Description</th><th>Elements</th></tr></thead><tbody>
+{% for f in data.components.flows %}<tr><td>{{ f.api_name }}</td><td>{{ f.status }}</td><td>{{ f.object }}</td><td>{{ f.trigger_type }}</td><td>{{ f.description }}</td><td>{{ f.counts }}</td></tr>{% endfor %}
+</tbody></table>
+
+<h2>Apex</h2>
+<table><thead><tr><th>Class</th><th>Lines</th><th>API</th><th>Test</th><th>REST</th><th>Invocable</th><th>Callout</th></tr></thead><tbody>
+{% for c in data.components.apex_classes %}<tr><td>{{ c.api_name }}</td><td>{{ c.lines }}</td><td>{{ c.api_version }}</td><td>{{ c.is_test }}</td><td>{{ c.is_rest }}</td><td>{{ c.is_invocable }}</td><td>{{ c.uses_callout }}</td></tr>{% endfor %}
+</tbody></table>
+
+<h2>Integrations</h2>
+<table><thead><tr><th>Type</th><th>Component</th></tr></thead><tbody>
+{% for x in data.components.named_credentials %}<tr><td>Named Credential</td><td>{{ x.api_name }}</td></tr>{% endfor %}
+{% for x in data.components.external_credentials %}<tr><td>External Credential</td><td>{{ x.api_name }}</td></tr>{% endfor %}
+{% for x in data.components.connected_apps %}<tr><td>Connected App</td><td>{{ x.api_name }}</td></tr>{% endfor %}
+{% for x in data.components.remote_sites %}<tr><td>Remote Site</td><td>{{ x.api_name }}</td></tr>{% endfor %}
+</tbody></table>
+
+<div class="page-break"></div>
+<h2>v0.2 Intelligence</h2>
+{% set intel = data.components.get('intelligence', {}) %}
+<h3>Field lineage</h3>
+<p>{{ intel.get('field_lineage', {}).get('field_count_with_lineage', 0) }} fields have writer/reader lineage evidence. The table below shows the highest-evidence examples.</p>
+<table><thead><tr><th>Field</th><th>Writers</th><th>Readers</th></tr></thead><tbody>
+{% for field, lin in (intel.get('field_lineage', {}).get('fields', {})).items() %}{% if loop.index <= 250 %}<tr><td>{{ field }}</td><td>{% for x in lin.writers %}{{ x.component }} ({{ (x.confidence*100)|round|int }}%){% if not loop.last %}<br>{% endif %}{% endfor %}</td><td>{% for x in lin.readers %}{{ x.component }} ({{ (x.confidence*100)|round|int }}%){% if not loop.last %}<br>{% endif %}{% endfor %}</td></tr>{% endif %}{% endfor %}
+</tbody></table>
+
+<h3>Apex coverage</h3>
+{% if charts.apex_coverage %}<img class="chart" src="{{ charts.apex_coverage }}">{% endif %}
+{% set cov = intel.get('apex_coverage', {}) %}
+<p>Available: {{ cov.get('available', false) }} · Aggregate coverage: {{ cov.get('overall_percent', 'N/A') }}{% if cov.get('overall_percent') is not none %}%{% endif %}</p>
+<table><thead><tr><th>Component</th><th>Covered</th><th>Uncovered</th><th>Coverage</th></tr></thead><tbody>
+{% for x in cov.get('components', [])[:100] %}<tr><td>{{ x.name }}</td><td>{{ x.covered }}</td><td>{{ x.uncovered }}</td><td>{{ x.coverage_percent if x.coverage_percent is not none else 'N/A' }}{% if x.coverage_percent is not none %}%{% endif %}</td></tr>{% endfor %}
+</tbody></table>
+
+<h3>Effective permission intelligence</h3>
+{% set ep = intel.get('effective_permissions', {}) %}
+<p>Active users analyzed: {{ ep.get('active_users_analyzed', 0) }} · Privileged users detected: {{ ep.get('privileged_users', [])|length }}</p>
+<table><thead><tr><th>User</th><th>Critical system permissions</th><th>Modify All objects</th></tr></thead><tbody>
+{% for u in ep.get('privileged_users', [])[:100] %}<tr><td>{{ u.username }}</td><td>{{ u.critical_user_permissions|join(', ') }}</td><td>{{ u.objects_modify_all|join(', ') }}</td></tr>{% endfor %}
+</tbody></table>
+
+<h3>Data volume</h3>
+{% if charts.data_volume %}<img class="chart" src="{{ charts.data_volume }}">{% endif %}
+{% set dp = intel.get('data_profile', {}) %}
+<p>Objects counted: {{ dp.get('objects_counted', 0) }} · LDV candidates: {{ dp.get('ldv_candidates', [])|length }}</p>
+<table><thead><tr><th>Object</th><th>Estimated records</th></tr></thead><tbody>
+{% for x in dp.get('largest_objects', [])[:50] %}<tr><td>{{ x.object }}</td><td>{{ x.record_count }}</td></tr>{% endfor %}
+</tbody></table>
+
+<h3>Order of execution hotspots</h3>
+{% if charts.automation_hotspots %}<img class="chart" src="{{ charts.automation_hotspots }}">{% endif %}
+<table><thead><tr><th>Object</th><th>Components</th><th>Before-save</th><th>After-save</th><th>Triggers</th><th>Validation Rules</th></tr></thead><tbody>
+{% for x in intel.get('order_of_execution', {}).get('hotspots', [])[:100] %}<tr><td>{{ x.object }}</td><td>{{ x.automation_components }}</td><td>{{ x.before_save_flows|join(', ') }}</td><td>{{ x.after_save_flows|join(', ') }}</td><td>{{ x.triggers|join(', ') }}</td><td>{{ x.validation_rules|join(', ') }}</td></tr>{% endfor %}
+</tbody></table>
+
+<h3>Blast radius</h3>
+<table><thead><tr><th>Component</th><th>Direct dependencies</th><th>Two-hop reach</th><th>Score</th></tr></thead><tbody>
+{% for x in intel.get('blast_radius', {}).get('top_components', [])[:100] %}<tr><td>{{ x.component }}</td><td>{{ x.direct_dependencies }}</td><td>{{ x.two_hop_reach }}</td><td>{{ x.blast_radius_score }}</td></tr>{% endfor %}
+</tbody></table>
+
+<h3>Runtime / observability</h3>
+<pre>{{ intel.get('runtime_usage', {}) | tojson(indent=2) }}</pre>
+<h3>Evidence gaps</h3>
+<p>{{ intel.get('evidence_gaps', [])|join(', ') if intel.get('evidence_gaps') else 'None detected in v0.2 runtime collectors.' }}</p>
+
+<div class="page-break"></div>
+<h2>v0.3 Org Intelligence</h2>
+{% set v3 = intel.get('v3', {}) %}
+<h3>Change risk & technical debt</h3>
+{% if charts.change_risk %}<img class="chart" src="{{ charts.change_risk }}">{% endif %}
+<table><thead><tr><th>Component</th><th>Dependency degree</th><th>Finding penalty</th><th>Change risk</th><th>Technical debt</th></tr></thead><tbody>
+{% for x in v3.get('risk_and_debt', {}).get('top_change_risk', [])[:100] %}<tr><td>{{ x.component }}</td><td>{{ x.dependency_degree }}</td><td>{{ x.finding_penalty }}</td><td>{{ x.change_risk_score }}</td><td>{{ x.technical_debt_score }}</td></tr>{% endfor %}
+</tbody></table>
+
+<h3>Runtime application & API evidence</h3>
+{% if charts.app_usage %}<img class="chart" src="{{ charts.app_usage }}">{% endif %}
+{% set ev = v3.get('event_monitoring', {}) %}
+<p>Event log bodies available: {{ ev.get('available', false) }} · Active-user evidence: {{ ev.get('active_users_evidence', 0) }}</p>
+<table><thead><tr><th>Observed application</th><th>Events</th></tr></thead><tbody>{% for x in ev.get('app_usage', [])[:100] %}<tr><td>{{ x.app }}</td><td>{{ x.events }}</td></tr>{% endfor %}</tbody></table>
+<table><thead><tr><th>API client / Connected App evidence</th><th>Events</th></tr></thead><tbody>{% for x in ev.get('api_clients', [])[:100] %}<tr><td>{{ x.client }}</td><td>{{ x.events }}</td></tr>{% endfor %}</tbody></table>
+
+<h3>Data quality profiling (opt-in)</h3>
+{% set dq = v3.get('data_quality_profile', {}) %}
+<p>Enabled: {{ dq.get('enabled', false) }} · Objects profiled: {{ dq.get('objects_profiled', 0) }} · Raw values persisted: {{ dq.get('raw_values_persisted', false) }}</p>
+{% for o in dq.get('objects', []) %}{% if not o.get('unavailable') %}<h4>{{ o.object }}</h4><table><thead><tr><th>Field</th><th>Sample rows</th><th>Null %</th><th>Distinct sample</th><th>Distinct ratio %</th></tr></thead><tbody>{% for f in o.field_stats %}<tr><td>{{ f.field }}</td><td>{{ f.sampled_rows }}</td><td>{{ f.null_percent }}</td><td>{{ f.distinct_count_sample }}</td><td>{{ f.distinct_ratio_percent }}</td></tr>{% endfor %}</tbody></table>{% endif %}{% endfor %}
+
+<h3>Apex semantic & integration map</h3>
+<table><thead><tr><th>Class</th><th>Endpoint type</th><th>URL mapping</th></tr></thead><tbody>{% for x in v3.get('apex_semantic_map', {}).get('endpoints', []) %}<tr><td>{{ x.class }}</td><td>{{ x.type }}</td><td>{{ x.url_mapping or '' }}</td></tr>{% endfor %}</tbody></table>
+<table><thead><tr><th>Class</th><th>Callout endpoint</th></tr></thead><tbody>{% for x in v3.get('apex_semantic_map', {}).get('callouts', []) %}<tr><td>{{ x.class }}</td><td>{{ x.endpoint }}</td></tr>{% endfor %}</tbody></table>
+
+<h3>Flow path map</h3>
+<table><thead><tr><th>Flow</th><th>Elements</th><th>Connector targets</th><th>Subflows</th><th>Actions</th></tr></thead><tbody>{% for name,x in v3.get('flow_path_map', {}).get('flows', {}).items() %}<tr><td>{{ name }}</td><td>{{ x.element_names|length }}</td><td>{{ x.connector_targets|length }}</td><td>{{ x.subflows|join(', ') }}</td><td>{{ x.actions|join(', ') }}</td></tr>{% endfor %}</tbody></table>
+
+<h3>Report & Dashboard dependencies</h3>
+<pre>{{ v3.get('report_dashboard_dependencies', {}) | tojson(indent=2) }}</pre>
+
+
+<div class="page-break"></div>
+<h2>v1.0 Enterprise Graph & Access Intelligence</h2>
+{% set v4 = intel.get('v4', {}) %}
+
+<h3>Structural Apex map</h3>
+<p>Parser: {{ v4.get('apex_ast', {}).get('parser', 'N/A') }} · Components mapped: {{ v4.get('apex_ast', {}).get('components_mapped', 0) }}</p>
+<table><thead><tr><th>Component</th><th>Apex references</th><th>SOQL objects</th></tr></thead><tbody>
+{% for x in v4.get('apex_ast', {}).get('components', [])[:150] %}
+<tr><td>{{ x.component }}</td><td>{{ x.apex_references|join(', ') }}</td><td>{{ x.soql_objects|join(', ') }}</td></tr>
+{% endfor %}
+</tbody></table>
+
+<h3>Structural Flow graph</h3>
+<p>Flows structurally mapped: {{ v4.get('flow_structural', {}).get('flows_mapped', 0) }}</p>
+<table><thead><tr><th>Flow</th><th>Elements</th><th>Edges</th></tr></thead><tbody>
+{% for name,x in v4.get('flow_structural', {}).get('flows', {}).items() %}
+<tr><td>{{ name }}</td><td>{{ x.elements|length }}</td><td>{{ x.edge_count }}</td></tr>
+{% endfor %}
+</tbody></table>
+
+<h3>UI lineage</h3>
+<p>UI files scanned: {{ v4.get('ui_lineage', {}).get('files_scanned', 0) }} · Dependency edges added: {{ v4.get('ui_lineage', {}).get('edges_added', 0) }}</p>
+
+<h3>Effective access evidence</h3>
+<p>Users analyzed: {{ v4.get('effective_access', {}).get('users_analyzed', 0) }}</p>
+<table><thead><tr><th>User ID</th><th>Permission Sets</th><th>Critical permissions</th><th>Modify All objects</th><th>Editable fields</th></tr></thead><tbody>
+{% for u in v4.get('effective_access', {}).get('users', [])[:150] %}
+<tr><td>{{ u.user_id }}</td><td>{{ u.permission_sets|join(', ') }}</td><td>{{ u.critical_user_permissions|join(', ') }}</td><td>{{ u.object_modify_all|join(', ') }}</td><td>{{ u.editable_fields_count }}</td></tr>
+{% endfor %}
+</tbody></table>
+
+<h3>Sharing model</h3>
+<table><thead><tr><th>Object</th><th>Internal OWD</th><th>External OWD</th></tr></thead><tbody>
+{% for x in v4.get('sharing', {}).get('objects', []) %}
+<tr><td>{{ x.object }}</td><td>{{ x.internal_owd or 'N/A' }}</td><td>{{ x.external_owd or 'N/A' }}</td></tr>
+{% endfor %}
+</tbody></table>
+
+<h3>Package / namespace lineage</h3>
+<pre>{{ v4.get('package_lineage', {}) | tojson(indent=2) }}</pre>
+
+<div class="page-break"></div>
+<h2>Assessment safety manifest</h2>
+<table><tbody>
+<tr><th>Mode</th><td>{{ data.audit.get('mode', '') }}</td></tr>
+<tr><th>Org modified</th><td>NO</td></tr>
+<tr><th>DML executed</th><td>0</td></tr>
+<tr><th>Metadata deployments</th><td>0</td></tr>
+<tr><th>Apex Anonymous executions</th><td>0</td></tr>
+<tr><th>Read operations executed by scanner</th><td>{{ data.audit.get('read_operations', 0) }}</td></tr>
+<tr><th>Metadata retrieve</th><td>{{ data.audit.get('metadata_retrieve_executed', false) }}</td></tr>
+<tr><th>Code Analyzer</th><td>{{ data.code_analyzer.get('available', false) }}</td></tr>
+</tbody></table>
+
+<h3>API budget</h3>
+<pre>{{ data.audit.get('api_budget', {}) | tojson(indent=2) }}</pre>
+
+<h3>Read errors / unavailable sources</h3>
+<pre>{{ data.audit.get('read_errors', []) | tojson(indent=2) }}</pre>
+
+<h3>Commands executed</h3>
+<pre>{% for cmd in data.audit.get('commands', []) %}{{ cmd }}\n{% endfor %}</pre>
+
+<h2>Dependency evidence</h2>
+<table><thead><tr><th>Source</th><th>Relationship</th><th>Target</th><th>Confidence</th></tr></thead><tbody>
+{% for d in data.dependencies[:1000] %}<tr><td>{{ d.source }}</td><td>{{ d.relationship }}</td><td>{{ d.target }}</td><td>{{ (d.confidence*100)|round|int }}%</td></tr>{% endfor %}
+</tbody></table>
+
+{% set ent = data.components.get('intelligence', {}).get('enterprise', {}) %}
+{% if ent %}
+<h2>Enterprise Intelligence Core</h2>
+{% set twin = ent.get('digital_twin', {}) %}
+<div class="grid">
+  <div class="card"><div class="small">Digital Twin</div><div class="metric">{{ twin.get('nodes',0) }}</div><div>{{ twin.get('edges',0) }} normalized edges</div></div>
+  <div class="card"><div class="small">Automation cycles</div><div class="metric">{{ twin.get('automation_cycles',[])|length }}</div><div>strongly connected cycles</div></div>
+  <div class="card"><div class="small">Capability readiness</div><div class="metric">{{ ent.get('competitive_readiness',{}).get('overall_readiness_percent','N/A') }}%</div><div>internal evidence-based readiness</div></div>
+  <div class="card"><div class="small">Evidence coverage</div><div class="metric">{{ ent.get('evidence_quality',{}).get('evidence_coverage_percent','N/A') }}%</div><div>findings with evidence</div></div>
+</div>
+<h3>Top structural hotspots</h3>
+<table><thead><tr><th>Component</th><th>Type</th><th>Degree</th><th>Criticality</th></tr></thead><tbody>
+{% for row in twin.get('hotspots',[])[:20] %}<tr><td><code>{{ row.component }}</code></td><td>{{ row.node_type }}</td><td>{{ row.degree }}</td><td>{{ row.structural_criticality_score }}</td></tr>{% endfor %}
+</tbody></table>
+<h3>Remediation plan</h3>
+<table><thead><tr><th>Priority</th><th>Severity</th><th>Component</th><th>Finding</th><th>Score</th></tr></thead><tbody>
+{% for row in ent.get('remediation_plan',{}).get('items',[])[:30] %}<tr><td><b>{{ row.priority }}</b></td><td>{{ row.severity|upper }}</td><td><code>{{ row.component }}</code></td><td>{{ row.title }}</td><td>{{ row.remediation_priority_score }}</td></tr>{% endfor %}
+</tbody></table>
+<h3>Architecture Advisor</h3>
+{% for rec in ent.get('architecture_advisor',{}).get('recommendations',[]) %}<div class="finding"><b>{{ rec.priority }} · {{ rec.title }}</b><div>{{ rec.rationale }}</div></div>{% endfor %}
+{% endif %}
+{% set v7 = data.components.get('intelligence', {}).get('v7', {}) %}
+{% if v7 %}
+<h2>Final Intelligence Layer</h2>
+{% set fr = v7.get('final_readiness', {}) %}
+<div class="grid">
+  <div class="card"><div class="small">Product-grade readiness</div><div class="metric">{{ fr.get('readiness_percent','N/A') }}%</div><div>{{ fr.get('engine_status','') }}</div></div>
+  <div class="card"><div class="small">Flow analysis</div><div class="metric">{{ v7.get('flow_quality',{}).get('flows_analyzed',0) }}</div><div>flows deeply inspected</div></div>
+  <div class="card"><div class="small">Runtime risk</div><div class="metric">{{ v7.get('runtime_health',{}).get('runtime_risk_score','N/A') }}</div><div>evidence-aware score</div></div>
+  <div class="card"><div class="small">Integration risk</div><div class="metric">{{ v7.get('integration_health',{}).get('health_risk_score','N/A') }}</div><div>endpoint/credential posture</div></div>
+</div>
+<h3>Transaction collision candidates</h3>
+<table><thead><tr><th>Object</th><th>Collision score</th><th>Mutating actors</th></tr></thead><tbody>
+{% for row in v7.get('order_of_execution_graph',{}).get('collision_candidates',[])[:25] %}<tr><td><code>{{ row.object }}</code></td><td>{{ row.collision_score }}</td><td>{{ row.mutating_actors }}</td></tr>{% endfor %}
+</tbody></table>
+<h3>Runtime health</h3><pre>{{ v7.get('runtime_health',{}).get('signals',{}) | tojson(indent=2) }}</pre>
+<h3>Data health</h3>
+<table><thead><tr><th>Object</th><th>Records</th><th>Risk</th><th>Avg null %</th><th>Skew</th></tr></thead><tbody>
+{% for row in v7.get('data_health',{}).get('highest_risk_objects',[])[:25] %}<tr><td><code>{{ row.object }}</code></td><td>{{ row.record_count }}</td><td>{{ row.data_health_risk_score }}</td><td>{{ row.average_null_percent_sample }}</td><td>{{ row.ownership_skew_candidate }}</td></tr>{% endfor %}
+</tbody></table>
+{% endif %}
+<footer class="document-footer">{{ branding.footer_text }}</footer>
+</body>
+</html>
