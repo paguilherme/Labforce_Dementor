@@ -1,4 +1,4 @@
-# Labforce Dementor for Salesforce v4.2.0 — Release Validation
+# Labforce Dementor for Salesforce v4.2.1 — Release Validation
 
 Date: 2026-10-12
 
@@ -6,7 +6,17 @@ Date: 2026-10-12
 
 **PACKAGE_READY**
 
-The assessment engine remains `PRODUCT_GRADE_CORE`. Version 4.2 packages it as the `labforce-dementor` Python distribution with the `dementor` command, while retaining the existing read-only and AI-consent controls.
+The assessment engine remains `PRODUCT_GRADE_CORE`. Version 4.2.1 adds real-time terminal progress and pt-BR assessment/report content while retaining the existing read-only and AI-consent controls.
+
+## Implemented in v4.2.1
+
+- seven visible assessment stages with current activity and elapsed time;
+- animated progress on interactive terminals and stable line output in CI/logs;
+- live detail for core runtime queries and long Salesforce metadata operations;
+- explicit completed, safely skipped and failed states;
+- `--no-progress` for silent integrations.
+- pt-BR titles, descriptions, recommendations, charts and labels in JSON, Markdown, HTML, PDF and impact reports;
+- stable technical keys/enums plus localized display labels for backward compatibility.
 
 ## Implemented in v4.2
 
@@ -42,19 +52,19 @@ The assessment engine remains `PRODUCT_GRADE_CORE`. Version 4.2 packages it as t
 ## Validation
 
 - Python compileall: PASS
-- Dementor automated tests: **50 passed**
+- Dementor automated tests: **53 passed**
 - Complete platform suite: **397 passed across 85 modules**
 - Legacy regression suite: PASS
 - New v4 intelligence tests: PASS
-- CLI `--version`: PASS (`dementor 4.2.0` and `labforce-dementor 4.2.0`)
+- CLI `--version`: PASS (`dementor 4.2.1` and `labforce-dementor 4.2.1`)
 - CLI `simulate`: PASS
 - CLI `continuous`: PASS
 - JSON report generation: PASS
 - Markdown report generation: PASS
 - HTML report generation: PASS
 - Branded PDF report generation from the installed wheel: PASS
-- Wheel build: PASS (`labforce_dementor-4.2.0-py3-none-any.whl`)
-- Source distribution build: PASS (`labforce_dementor-4.2.0.tar.gz`)
+- Wheel build: PASS (`labforce_dementor-4.2.1-py3-none-any.whl`)
+- Source distribution build: PASS (`labforce_dementor-4.2.1.tar.gz`)
 - `twine check --strict`: PASS
 - PEP 639 license expression and packaged license file: PASS
 - isolated install with `uv tool install <wheel>`: PASS
@@ -63,7 +73,7 @@ The assessment engine remains `PRODUCT_GRADE_CORE`. Version 4.2 packages it as t
 - Working-tree and Git-history distribution audits: PASS
 - Read-only guardrail contract preserved: PASS
 
-PyPI upload was not executed in local validation. Public installation with `pip install labforce-dementor` begins after the GitHub repository and PyPI Trusted Publisher are connected and a `v4.2.0` release is published.
+PyPI upload is performed by GitHub Trusted Publishing when the `v4.2.1` release is published.
 
 ## Safety contract
 
