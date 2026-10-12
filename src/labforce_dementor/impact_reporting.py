@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .branding import footer_text, logo_data_uri, report_metadata, with_report_metadata
+from .localization import severity_label
 
 
 def render_impact_html(
@@ -26,11 +27,11 @@ def render_impact_html(
     )
     affected = "".join(f"<li>{html.escape(x)}</li>" for x in data.get("affected_components", [])[:250])
     findings = "".join(
-        f"<tr><td>{html.escape(str(f.get('id','')))}</td><td>{html.escape(str(f.get('severity','')).upper())}</td><td>{html.escape(str(f.get('title','')))}</td></tr>"
+        f"<tr><td>{html.escape(str(f.get('id','')))}</td><td>{html.escape(severity_label(str(f.get('severity',''))))}</td><td>{html.escape(str(f.get('title','')))}</td></tr>"
         for f in data.get("related_findings", [])
     )
     doc = f"""<!doctype html>
-<html><head><meta charset="utf-8"><title>Change Impact - {html.escape(data.get('component',''))}</title>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>Impacto da mudança - {html.escape(data.get('component',''))}</title>
 <style>
 @page {{ size:A4; margin:18mm 18mm 22mm; @bottom-center {{ content:"{footer} · Página " counter(page) " / " counter(pages); font-size:8pt; color:#657184; }} }}
 body {{ font-family: Arial, sans-serif; color:#1d2733; font-size:11px; }}
@@ -48,19 +49,19 @@ footer {{ margin-top:34px; border-top:1px solid #d8dee6; padding-top:10px; color
 </style></head>
 <body>
 <img class="logo" src="{logo_data_uri()}" alt="Labforce">
-<h1>Labforce Dementor — Change Impact Assessment</h1>
+<h1>Labforce Dementor — Assessment de impacto da mudança</h1>
 <p><code>{html.escape(data.get('component',''))}</code></p>
 <div class="grid">
-<div class="card"><div>Risk</div><div class="big">{html.escape(data.get('risk',''))}</div></div>
-<div class="card"><div>Change Risk</div><div class="big">{data.get('change_risk_score',0)}/100</div></div>
-<div class="card"><div>Blast Radius</div><div class="big">{data.get('blast_radius',0)}</div></div>
+<div class="card"><div>Risco</div><div class="big">{html.escape(severity_label(str(data.get('risk',''))))}</div></div>
+<div class="card"><div>Risco da mudança</div><div class="big">{data.get('change_risk_score',0)}/100</div></div>
+<div class="card"><div>Raio de impacto</div><div class="big">{data.get('blast_radius',0)}</div></div>
 </div>
-<h2>Affected component types</h2>
-<table><thead><tr><th>Type</th><th>Count</th></tr></thead><tbody>{rows}</tbody></table>
-<h2>Related findings</h2>
-<table><thead><tr><th>ID</th><th>Severity</th><th>Finding</th></tr></thead><tbody>{findings or '<tr><td colspan="3">No related findings.</td></tr>'}</tbody></table>
-<h2>Affected components</h2><ul>{affected}</ul>
-<p><small>Generated from an existing assessment snapshot. No Salesforce API calls were made by this impact command.</small></p>
+<h2>Tipos de componentes afetados</h2>
+<table><thead><tr><th>Tipo</th><th>Quantidade</th></tr></thead><tbody>{rows}</tbody></table>
+<h2>Achados relacionados</h2>
+<table><thead><tr><th>ID</th><th>Severidade</th><th>Achado</th></tr></thead><tbody>{findings or '<tr><td colspan="3">Nenhum achado relacionado.</td></tr>'}</tbody></table>
+<h2>Componentes afetados</h2><ul>{affected}</ul>
+<p><small>Gerado a partir de um snapshot de assessment existente. Este comando de impacto não realizou chamadas à API do Salesforce.</small></p>
 <footer>{footer}</footer>
 </body></html>"""
     output.write_text(doc, encoding="utf-8")
