@@ -118,7 +118,13 @@ class SFCLI:
             args.append("--json")
         return self.run(args, tolerate_failure=tolerate_failure, timeout=900)
 
-    def generate_manifest(self, metadata_types: list[str], manifest_dir: Path, batch_size: int = 10) -> dict[str, Any]:
+    def generate_manifest(
+        self,
+        metadata_types: list[str] | None,
+        manifest_dir: Path,
+        batch_size: int = 10,
+        include_packages: list[str] | None = None,
+    ) -> dict[str, Any]:
         manifest_dir.mkdir(parents=True, exist_ok=True)
         args = [
             "project", "generate", "manifest",
@@ -126,8 +132,12 @@ class SFCLI:
             "--name", "package",
             "--output-dir", str(manifest_dir),
         ]
-        for item in metadata_types:
+        for item in metadata_types or []:
             args.extend(["--metadata", item])
+        for package_type in include_packages or []:
+            if package_type not in {"managed", "unlocked"}:
+                raise SFCLIError(f"Unsupported package type for manifest discovery: {package_type}")
+            args.extend(["--include-packages", package_type])
         args.append("--json")
         return self.run(args, timeout=1800, extra_env={"SF_LIST_METADATA_BATCH_SIZE": str(batch_size)})["payload"]
 

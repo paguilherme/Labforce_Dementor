@@ -9,6 +9,7 @@ from typing import Any
 import networkx as nx
 
 from .models import Evidence, Finding
+from .governance_analysis import analyze_code_governance
 
 
 SEVERITY_MAP = {1: "critical", 2: "high", 3: "medium", 4: "low", 5: "info"}
@@ -308,6 +309,70 @@ def analyze_extended_governance(components: dict[str, Any], findings: list[Findi
         ))
 
 
+def analyze_architecture_governance(
+    components: dict[str, Any],
+    findings: list[Finding],
+    config: dict[str, Any],
+) -> None:
+    governance = analyze_code_governance(components, config)
+    components["code_governance"] = governance
+    seq = 1
+    for row in governance.get("god_class_candidates", []):
+        findings.append(_finding(
+            f"GOD-{seq:04d}", "architecture", "high", "Candidata a Classe Deus",
+            f"{row['api_name']} atingiu {row['score']}/100 na heurística de concentração de responsabilidades "
+            f"({row['lines']} linhas, {row['methods']} métodos, complexidade {row['complexity_proxy']}, "
+            f"{row['class_dependencies']} dependências e {row['responsibilities']} responsabilidades detectadas).",
+            component=row["api_name"],
+            recommendation="Separe responsabilidades por domínio, extraia serviços/coordenadores menores e proteja a refatoração com testes de caracterização.",
+            effort="High", confidence=0.88,
+            evidence=[Evidence("APEX_STRUCTURAL_METRICS", row.get("source_file", ""), json.dumps({k: row[k] for k in ("score", "lines", "methods", "complexity_proxy", "class_dependencies", "responsibilities", "signals")}, ensure_ascii=False), 0.88)],
+        ))
+        seq += 1
+    for row in governance.get("god_test_class_candidates", []):
+        findings.append(_finding(
+            f"GODTEST-{seq:04d}", "testing", "high", "Candidata a Classe Deus de testes",
+            f"{row['api_name']} concentra {row['test_methods']} métodos de teste, {row['lines']} linhas, "
+            f"{row['class_dependencies']} dependências e {row['responsibilities']} responsabilidades, com pontuação {row['score']}/100.",
+            component=row["api_name"],
+            recommendation="Divida os testes por unidade/comportamento, centralize somente os builders realmente compartilhados e mantenha dados de teste específicos por cenário.",
+            effort="Medium", confidence=0.88,
+            evidence=[Evidence("APEX_TEST_STRUCTURAL_METRICS", row.get("source_file", ""), json.dumps({k: row[k] for k in ("score", "lines", "test_methods", "complexity_proxy", "class_dependencies", "responsibilities", "signals")}, ensure_ascii=False), 0.88)],
+        ))
+        seq += 1
+    for row in governance.get("transaction_governor_risks", []):
+        details = ", ".join(f"{risk['metric']}={risk['count']}" for risk in row.get("risks", []))
+        findings.append(_finding(
+            f"GOVCODE-{seq:04d}", "governance", "medium", "Concentração estática de operações Apex",
+            f"{row['component']} concentra indicadores estáticos que merecem revisão: {details}. "
+            "A contagem no arquivo não prova consumo em uma única transação, mas indica risco de governança.",
+            component=str(row["component"]).split(":", 1)[-1],
+            recommendation="Mapeie os caminhos de execução, meça o consumo com Limits nos testes e reduza consultas, DML ou callouts por transação.",
+            effort="Medium", confidence=0.68,
+            evidence=[Evidence("APEX_STATIC_GOVERNOR_PROXY", str(row["component"]), json.dumps(row.get("risks", []), ensure_ascii=False), 0.68)],
+        ))
+        seq += 1
+
+    analyze_limit_governance(components, findings)
+
+
+def analyze_limit_governance(components: dict[str, Any], findings: list[Finding]) -> None:
+    seq = 1
+    limits = components.get("org_limit_governance", {})
+    for row in limits.get("outside_governance", [])[:100]:
+        severity = "critical" if row.get("status") == "critical" else "high"
+        findings.append(_finding(
+            f"ORGLIMIT-{seq:04d}", "governance", severity, "Limite da organização com margem reduzida",
+            f"{row['name']} possui {row['remaining']} de {row['max']} unidades restantes "
+            f"({row['remaining_percent']}% de margem; {row['used_percent']}% utilizado).",
+            component=row["name"],
+            recommendation="Defina responsável, alerta e plano de redução/expansão antes que o limite afete processos de negócio ou integrações.",
+            effort="Medium", confidence=1.0,
+            evidence=[Evidence("ORG_LIMITS_API", "sf org list limits", json.dumps(row, ensure_ascii=False), 1.0)],
+        ))
+        seq += 1
+
+
 def analyze_unused(components: dict[str, Any], findings: list[Finding]) -> None:
     seq = 1
     classes = components.get("apex_classes", [])
@@ -406,14 +471,14 @@ def calculate_health(findings: list[Finding], config: dict[str, Any], components
     # Coverage represents how much evidence Dementor actually collected for each score.
     coverage = {
         "security": 1.0 if (components.get("permission_sets") or components.get("profiles")) else 0.0,
-        "architecture": 1.0 if components.get("objects") else 0.0,
+        "architecture": 1.0 if (components.get("objects") or components.get("apex_classes")) else 0.0,
         "performance": 0.8 if (components.get("apex_classes") or components.get("flows")) else 0.0,
         "automation": 1.0 if (components.get("flows") or components.get("apex_triggers")) else 0.0,
         "apex": 1.0 if (components.get("apex_classes") or components.get("apex_triggers")) else 0.0,
         "testing": 1.0 if intel.get("apex_coverage", {}).get("available") else (0.65 if components.get("apex_classes") else 0.0),
         "integrations": 0.75 if integration_inventory else 0.0,
         "data_quality": 0.9 if intel.get("v3", {}).get("data_quality_profile", {}).get("available") else 0.0,
-        "governance": 0.9 if components.get("objects") else 0.0,
+        "governance": 0.9 if (components.get("objects") or components.get("org_limit_governance", {}).get("available")) else 0.0,
         "maintainability": 0.9 if (components.get("apex_classes") or components.get("flows")) else 0.0,
         "observability": 1.0 if intel.get("v3", {}).get("event_monitoring", {}).get("available") else (0.75 if intel.get("runtime_usage", {}).get("event_monitoring_available") else (0.35 if isinstance(runtime.get("api_total_usage_logs"), dict) and not runtime.get("api_total_usage_logs", {}).get("unavailable") else 0.0)),
     }
@@ -455,6 +520,7 @@ def analyze(components: dict[str, Any], config: dict[str, Any], code_analyzer_pa
     analyze_flows(components, findings)
     analyze_governance(components, findings)
     analyze_extended_governance(components, findings)
+    analyze_architecture_governance(components, findings, config)
     analyze_unused(components, findings)
     analyze_testing(components, findings)
     ca = import_code_analyzer(code_analyzer_path, findings) if code_analyzer_path else {"available": False, "violations": 0}

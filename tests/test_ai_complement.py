@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 from labforce_dementor.ai_complement import (
     AiComplementError,
@@ -113,6 +114,42 @@ class AiComplementTests(unittest.TestCase):
                     transport=transport,
                 )
 
+
+    def test_local_authenticated_cli_generates_reports_without_api_credential(self) -> None:
+        response = json.dumps({
+            "executive_summary": "Complemento local.",
+            "correlations": [],
+            "recommendations": [],
+            "limitations": [],
+        })
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            assessment_path = root / "assessment.json"
+            assessment_path.write_text(json.dumps(ASSESSMENT), encoding="utf-8")
+            preview_path = root / "preview.json"
+            plan = create_preview(
+                assessment_path,
+                provider="codex-local",
+                model="default",
+                data_scopes=["findings_summary"],
+                output_path=preview_path,
+                now=datetime(2026, 10, 12, 12, 0, tzinfo=timezone.utc),
+            )
+            original_hash = assessment_path.read_bytes()
+            with patch("labforce_dementor.ai_complement.invoke_local_ai", return_value=(response, {"input_tokens": 10}, "local-session:codex")) as invoke, patch("labforce_dementor.ai_complement._http_transport") as http, patch("labforce_dementor.ai_credentials.resolve_ai_credential") as credentials:
+                result = execute_complement(
+                    preview_path,
+                    authorization_phrase=plan["authorization_phrase"],
+                    authorized_by="paulo",
+                    output_dir=root / "reports",
+                    now=datetime(2026, 10, 12, 12, 1, tzinfo=timezone.utc),
+                )
+            invoke.assert_called_once()
+            self.assertEqual(result["consent"]["credential_reference"], "local-session:codex")
+            self.assertTrue((root / "reports" / "ai-complement.pdf").exists())
+            http.assert_not_called()
+            credentials.assert_not_called()
+            self.assertEqual(assessment_path.read_bytes(), original_hash)
 
 if __name__ == "__main__":
     unittest.main()

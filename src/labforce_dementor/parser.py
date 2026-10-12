@@ -5,6 +5,7 @@ import xml.etree.ElementTree as ET
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterable
+from .apex_lexical import code_only
 
 
 def local(tag: str) -> str:
@@ -196,7 +197,7 @@ def parse_apex(root_dir: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any
                 "status": child_text(meta, "status") if meta is not None else "",
                 "length": len(text),
                 "lines": text.count("\n") + 1,
-                "is_test": bool(re.search(r"@isTest\b|testMethod\b", text, re.I)),
+                "is_test": bool(re.search(r"@isTest\b|testMethod\b", code_only(text), re.I)),
                 "is_rest": bool(re.search(r"@RestResource\b", text, re.I)),
                 "is_aura_enabled": bool(re.search(r"@AuraEnabled\b", text, re.I)),
                 "is_invocable": bool(re.search(r"@InvocableMethod\b", text, re.I)),

@@ -56,10 +56,11 @@ class AiWizardTests(unittest.TestCase):
         self.assertIn("dementor ai-report --assessment", output.getvalue())
 
     def test_exact_consent_is_required_after_the_preview(self) -> None:
-        answers = ["s", "1", "user-selected-model", "2", "1", "paulo@example.com", "sim"]
+        answers = ["s", "1", "user-selected-model", "2", "paulo@example.com", "sim"]
         with (
             self.terminal() as output,
             patch("builtins.input", side_effect=answers),
+            patch("labforce_dementor.ai_wizard.detect_local_ai", return_value=[{"provider": "codex-local", "label": "Codex", "executable": "codex", "path": "/bin/codex"}]),
             patch("labforce_dementor.ai_wizard.execute_complement") as execute,
             patch("labforce_dementor.ai_wizard.resolve_ai_credential") as credential,
         ):
@@ -67,14 +68,14 @@ class AiWizardTests(unittest.TestCase):
         execute.assert_not_called()
         credential.assert_not_called()
         preview = json.loads((self.assessment.parent / "ai-consent-preview.json").read_text())
-        self.assertEqual(preview["provider"], "openai")
+        self.assertEqual(preview["provider"], "codex-local")
         self.assertEqual(preview["model"], "user-selected-model")
         self.assertEqual(preview["data_scopes"], ["findings_with_evidence"])
         self.assertIn("Nenhum dado foi enviado", output.getvalue())
         self.assertEqual(self.assessment.read_text(), self.original)
 
     def test_authorized_selection_delegates_to_existing_consent_engine(self) -> None:
-        answers = iter(["s", "ollama", "local-user-model", "findings_summary", "Paulo"])
+        answers = iter(["s", "codex-local", "default", "findings_summary", "Paulo"])
 
         def answer(prompt: str) -> str:
             if "Para autorizar" in prompt:
@@ -85,17 +86,30 @@ class AiWizardTests(unittest.TestCase):
         with (
             self.terminal(),
             patch("builtins.input", side_effect=answer),
+            patch("labforce_dementor.ai_wizard.detect_local_ai", return_value=[{"provider": "codex-local", "label": "Codex", "executable": "codex", "path": "/bin/codex"}]),
             patch(
                 "labforce_dementor.ai_wizard.execute_complement",
-                return_value={"provider": "ollama", "model": "local-user-model"},
+                return_value={"provider": "codex-local", "model": "default"},
             ) as execute,
         ):
             self.assertTrue(offer_ai_report(self.assessment))
         self.assertEqual(execute.call_count, 1)
         call = execute.call_args.kwargs
         self.assertEqual(call["authorized_by"], "Paulo")
-        self.assertEqual(call["credential_loader"](), (None, "local-loopback:ollama"))
         self.assertEqual(self.assessment.read_text(), self.original)
+
+    def test_missing_local_assistant_preserves_assessment_without_api(self) -> None:
+        with (
+            self.terminal() as output,
+            patch("builtins.input", return_value="s"),
+            patch("labforce_dementor.ai_wizard.detect_local_ai", return_value=[]),
+            patch("labforce_dementor.ai_wizard.create_preview") as preview,
+            patch("labforce_dementor.ai_wizard.execute_complement") as execute,
+        ):
+            self.assertTrue(offer_ai_report(self.assessment))
+        preview.assert_not_called()
+        execute.assert_not_called()
+        self.assertIn("Nenhuma API foi chamada", output.getvalue())
 
     def test_eof_and_keyboard_interrupt_keep_assessment(self) -> None:
         for error in (EOFError, KeyboardInterrupt):
@@ -144,11 +158,12 @@ class AiWizardTests(unittest.TestCase):
         collect.assert_not_called()
 
     def test_preview_failure_reports_error_and_preserves_snapshot(self) -> None:
-        answers = ["s", "ollama", "local-user-model", "1", "Paulo"]
+        answers = ["s", "codex-local", "default", "1", "Paulo"]
         with (
             self.terminal(),
             contextlib.redirect_stderr(io.StringIO()),
             patch("builtins.input", side_effect=answers),
+            patch("labforce_dementor.ai_wizard.detect_local_ai", return_value=[{"provider": "codex-local", "label": "Codex", "executable": "codex", "path": "/bin/codex"}]),
             patch(
                 "labforce_dementor.ai_wizard.create_preview",
                 side_effect=AiComplementError("invalid snapshot"),

@@ -1,5 +1,17 @@
 # Changelog
 
+## 4.3.0 — preparado em 2026-10-12
+
+- Descobre metadados via org e recupera em lotes, com manifesto integral, membros retornados/ausentes, pacotes excluídos e hashes SHA-256.
+- Interrompe diante de cobertura parcial, evita snapshots antigos e valida identidade/hashes ao retomar.
+- Revalida deploy/validate e orçamento entre lotes de retrieve.
+- Classifica candidatos a Classes Deus de produção e de teste com métricas e limiares configuráveis.
+- Mostra riscos estáticos de operações Apex sem confundi-los com consumo por transação.
+- Analisa a última coleta de limites da org e publica margem, alertas, tabelas e gráfico.
+- Oferece complemento por CLI local Codex/Claude/Gemini autenticado, sem chave nem chamada direta de API no fluxo guiado.
+- Mantém consentimento explícito, uso único atômico, sanitização e complemento consultivo separado.
+- Atualiza metodologia, relatórios e testes do fluxo completo.
+
 ## 4.2.1 — 2026-10-12
 
 - Oferece o complemento de IA ao final do `run` em terminais interativos, inclusive quando o PDF não é gerado.

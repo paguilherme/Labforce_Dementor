@@ -63,9 +63,13 @@ Por padrão, os resultados são gravados em `./assessments/<org>/<data-hora>` e 
 - API budget e deployment guard;
 - evidências e manifestos locais.
 
+## Retrieve e governança na v4.3.0
+
+A descoberta usa os tipos disponíveis na org e recupera membros em lotes. Cada execução preserva `metadata-package.xml`, manifestos dos lotes e `metadata-retrieve-audit.json` com cobertura e hashes. Retrieves parciais interrompem o diagnóstico por padrão. A análise distingue candidatos a Classes Deus de produção e de teste e mostra a margem restante dos limites da org em tabelas e gráfico. Recuperação é limitada por API, permissões e pacotes; não comprova cobertura integral da org.
+
 ## IA opcional com autorização explícita
 
-Ao terminar `dementor run` em um terminal interativo, responda à pergunta sobre gerar o complemento. Você escolhe provedor, modelo, dados e credencial, revisa a prévia e digita a frase de autorização antes do envio. Use `--no-ai-prompt` para pular essa etapa; sessões sem terminal não chamam IA.
+Ao terminar `dementor run` em um terminal interativo, responda à pergunta sobre gerar o complemento. Você escolhe um CLI local instalado, modelo e dados, revisa a prévia e digita a frase de autorização antes do envio. Use `--no-ai-prompt` para pular essa etapa; sessões sem terminal não chamam IA.
 
 Para usar um JSON já gerado sem refazer a coleta:
 
@@ -73,15 +77,15 @@ Para usar um JSON já gerado sem refazer a coleta:
 dementor ai-report --assessment assessments/MINHA_ORG/EXECUCAO/assessment.json
 ```
 
-O assistente lê a chave da variável de ambiente do provedor (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY` ou `GEMINI_API_KEY`) ou do cofre Labforce, conforme sua escolha. Ollama local não exige chave. Cancelar ou falhar na etapa preserva o assessment.
+O fluxo guiado usa Codex com login ChatGPT, Claude Code com OAuth ou Gemini CLI com login Google. Não pede chave de API nem depende da Base Salesforce. Autentique o CLI no mesmo usuário do terminal. O processamento continua sendo feito pelo provedor, dentro da quota da sua conta. Cancelar ou falhar preserva o assessment. Adapters antigos de API/Ollama ficam restritos aos comandos manuais explícitos por compatibilidade.
 
 Os comandos manuais continuam disponíveis. Primeiro, gere a prévia sanitizada. Essa etapa não chama o provedor:
 
 ```bash
 dementor ai-preview \
   --assessment assessment.json \
-  --provider openai \
-  --model MODELO_EXATO \
+  --provider codex-local \
+  --model default \
   --scope findings_with_evidence \
   --output ai-consent-preview.json
 ```
@@ -93,7 +97,6 @@ dementor ai-complement \
   --preview ai-consent-preview.json \
   --authorize AUTORIZAR-XXXXXXXX \
   --authorized-by usuario@example.com \
-  --credential-source environment \
   --output-dir ai-complement-report
 ```
 

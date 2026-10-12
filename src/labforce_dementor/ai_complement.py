@@ -13,15 +13,17 @@ from typing import Any, Callable
 from uuid import uuid4
 
 from .branding import footer_text, logo_data_uri, report_metadata, with_report_metadata
+from .local_ai import LOCAL_AI_PROVIDERS, LocalAiError, invoke_local_ai
 
 
-PROVIDERS = ("openai", "anthropic", "gemini", "ollama")
+API_PROVIDERS = ("openai", "anthropic", "gemini", "ollama")
+PROVIDERS = LOCAL_AI_PROVIDERS + API_PROVIDERS
 DATA_SCOPES = (
     "findings_summary",
     "findings_with_evidence",
     "relevant_metadata_fragments",
 )
-PROMPT_VERSION = "dementor-ai-v1"
+PROMPT_VERSION = "dementor-ai-v2"
 SCHEMA_VERSION = "dementor-ai-complement-v1"
 DEFAULT_ENDPOINTS = {
     "openai": "https://api.openai.com/v1/responses",
@@ -52,6 +54,7 @@ def sha256_file(path: Path) -> str:
 
 
 _SECRET_PATTERNS = (
+    re.compile(r'(?i)("(?:api[_-]?key|access[_-]?token|refresh[_-]?token|token|password|client[_-]?secret)"\s*:\s*")[^"]*'),
     re.compile(r"(?i)(authorization\s*[:=]\s*(?:bearer\s+)?)[^\s,;]+"),
     re.compile(r"(?i)((?:api[_-]?key|token|password|client[_-]?secret)\s*[:=]\s*)[^\s,;]+"),
     re.compile(r"(?i)(https?://[^\s?#]+)\?[^\s#]+"),
@@ -261,6 +264,24 @@ def invoke_provider(
     call = transport or _http_transport
     instruction = _system_instruction([str(item.get("id", "")) for item in payload.get("findings", [])])
     serialized = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    if provider in LOCAL_AI_PROVIDERS:
+        prompt = (
+            instruction
+            + f"\nMantenha a resposta concisa, com aproximadamente {max_output_tokens} tokens ou menos. Não use ferramentas ou leia arquivos."
+            + "\n\nRetorne apenas o objeto JSON solicitado, sem bloco Markdown.\n\n"
+            + "DADOS SANITIZADOS DO ASSESSMENT:\n"
+            + serialized
+        )
+        try:
+            text, usage, _ = invoke_local_ai(
+                provider=provider,
+                model=model,
+                prompt=prompt,
+                timeout=max(timeout, 600),
+            )
+        except LocalAiError as exc:
+            raise AiComplementError(str(exc)) from exc
+        return text, usage
     url = endpoint or DEFAULT_ENDPOINTS[provider]
 
     if provider == "openai":
@@ -397,6 +418,8 @@ def execute_complement(
     transport: Transport | None = None,
 ) -> dict[str, Any]:
     plan = json.loads(preview_path.read_text(encoding="utf-8"))
+    if plan.get("prompt_version") != PROMPT_VERSION or plan.get("schema_version") != SCHEMA_VERSION:
+        raise AiComplementError("AI preview was created for a different prompt/schema version; create a new preview")
     if plan.get("status") != "awaiting_consent":
         raise AiComplementError("AI preview is not awaiting consent")
     if authorization_phrase != plan.get("authorization_phrase"):
@@ -424,19 +447,23 @@ def execute_complement(
     if _canonical_json(regenerated) != _canonical_json(payload):
         raise AiComplementError("AI input no longer matches the deterministic assessment")
 
-    used_path.write_text(json.dumps({
-        "request_id": plan["request_id"],
-        "status": "running",
-        "authorized_by": authorized_by.strip(),
-        "authorized_at": instant.isoformat(timespec="seconds"),
-    }, indent=2, ensure_ascii=False), encoding="utf-8")
     try:
-        if credential_loader is not None:
+        with used_path.open("x", encoding="utf-8") as receipt:
+            json.dump({"request_id": plan["request_id"], "status": "running", "authorized_by": authorized_by.strip(),
+                       "authorized_at": instant.isoformat(timespec="seconds")}, receipt, indent=2, ensure_ascii=False)
+    except FileExistsError as exc:
+        raise AiComplementError("AI authorization preview has already been used") from exc
+    try:
+        provider = str(plan["provider"])
+        if provider in LOCAL_AI_PROVIDERS:
+            credential_reference = f"local-session:{provider.removesuffix('-local')}"
+            api_key = None
+        elif credential_loader is not None:
             api_key, credential_reference = credential_loader()
         if not credential_reference:
             raise AiComplementError("AI credential reference is unavailable")
         raw, usage = invoke_provider(
-            provider=str(plan["provider"]),
+            provider=provider,
             model=str(plan["model"]),
             payload=payload,
             api_key=api_key,
@@ -464,6 +491,8 @@ def execute_complement(
         "deterministic_result_modified": False,
         "source_assessment_sha256": plan["assessment_sha256"],
         "provider": plan["provider"],
+        "transport": "authenticated_local_cli" if provider in LOCAL_AI_PROVIDERS else "api",
+        "direct_api_used": provider not in LOCAL_AI_PROVIDERS,
         "model": plan["model"],
         "data_scopes": plan["data_scopes"],
         "input_sha256": plan["input_sha256"],

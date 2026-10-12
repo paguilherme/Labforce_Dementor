@@ -1,92 +1,46 @@
-# Labforce Dementor for Salesforce v4.2.1 — Release Validation
+# Labforce Dementor v4.3.0 — validação da release
 
-Date: 2026-10-12
+Preparado em 2026-10-12. Status: **PACKAGE_READY_FOR_REVIEW**.
 
-## Release status
+## Escopo
 
-**PACKAGE_READY**
+- Retrieve amplo via org, manifesto integral e manifestos de lotes, reconciliação e hashes.
+- Profiles repetidos por lote e união local dos fragmentos de permissões.
+- Guard de deploy/validate e orçamento entre lotes; cobertura parcial interrompe por padrão.
+- Classes Deus de produção/teste, indicadores estáticos de operações Apex e governança da margem dos limites da org.
+- Fluxo guiado por Codex/Claude/Gemini CLI com autenticação própria, payload sanitizado, consentimento e complemento separado.
+- Relatórios JSON, Markdown, HTML e PDF, documentação da metodologia e CI para Python 3.11/3.12.
 
-The assessment engine remains `PRODUCT_GRADE_CORE`. Version 4.2.1 adds real-time terminal progress and pt-BR assessment/report content while retaining the existing read-only and AI-consent controls.
+## Evidências locais
 
-## Implemented in v4.2.1
+- Suíte automatizada: 96 testes aprovados, incluindo fluxo retrieve → análise → relatórios com fixture Salesforce.
+- Regressões de read-only, consentimento, hash, expiração, uso único, não mutação do diagnóstico e ausência de chamadas diretas de API no adapter local.
+- Casos de cobertura parcial, deploy entre fases/lotes, snapshots antigos e resume com hash/org divergentes.
+- Métricas sem contaminação por strings/comentários, métodos de teste legados, triggers e margens exatas dos limites.
+- Geração de PDF real, gráfico dos limites e inspeção visual das páginas de governança e auditoria.
+- Python compileall e git diff --check aprovados.
+- Wheel e sdist construídos; twine check --strict aprovado.
+- Instalação do wheel em ambiente isolado, aliases `dementor`/`labforce-dementor`, versão 4.3.0, módulos, defaults incorporados, template e logo verificados.
 
-- seven visible assessment stages with current activity and elapsed time;
-- animated progress on interactive terminals and stable line output in CI/logs;
-- live detail for core runtime queries and long Salesforce metadata operations;
-- explicit completed, safely skipped and failed states;
-- `--no-progress` for silent integrations.
-- pt-BR titles, descriptions, recommendations, charts and labels in JSON, Markdown, HTML, PDF and impact reports;
-- stable technical keys/enums plus localized display labels for backward compatibility.
+O ambiente local executou Python 3.12. Python 3.11 está no workflow de CI e seu resultado deve ser conferido no PR. Um aviso de dependência nativa HarfBuzz-Subset do WeasyPrint não impediu a geração de PDF local; a dependência é instalada no workflow de CI.
 
-## Implemented in v4.2
+## Fronteiras de homologação
 
-- installable wheel and source distribution named `labforce-dementor`;
-- primary `dementor` executable and backward-compatible `labforce-dementor` alias;
-- dependency-light `--version` entry point;
-- package metadata for Python 3.11 and 3.12;
-- packaged report template and exact Labforce Base UI logo;
-- dedicated public PyPI README with `uv tool` as the recommended installation path;
-- free proprietary license declared through `LicenseRef-Labforce-Free-Proprietary-1.0` and embedded in the wheel;
-- GitHub release workflow for PyPI Trusted Publishing;
-- CI validation for package build, metadata and complete platform tests;
-- complete test runner support for both `unittest` and pytest function-style tests.
+Não houve conexão a uma org Salesforce real nem execução com conta real dos CLIs de IA neste ambiente. As chamadas Salesforce e autenticação/geração dos CLIs foram simuladas nos testes. Antes de publicar, execute um assessment em org de homologação e um complemento autorizado no Mac com o CLI atualizado e autenticado.
 
-## Implemented in v4
+Cobertura é limitada pelo usuário/API/pacotes. `verified_requested_members` confirma os membros solicitados e não a totalidade da org. A análise semântica cobre as famílias do parser. Classes Deus são candidatas heurísticas; contagens de operações não medem consumo transacional. Margens de limites são observações, não previsões. Orçamento global é estimado em checkpoints e pode ser ultrapassado por uma operação indivisível ou outros consumidores.
 
-- deterministic record-save transaction topology / order-of-execution graph
-- automation collision scoring across Flow, Trigger, Validation Rule, Workflow and Approval Process evidence
-- deep Flow graph analysis: loops, record/action operations, fault-connector evidence and unreachable candidates
-- Apex call graph, fan-in/fan-out, sharing-mode analysis and conservative SOQL/DML-in-loop candidates
-- static test-to-class mapping correlated with ApexCodeCoverageAggregate when available
-- evidence-aware Data Health, null-density/cardinality/LDV/ownership-skew correlation without raw-value persistence
-- Runtime Health across Event Monitoring, app/user evidence, API clients, failed async Apex and coverage
-- Integration Health across Apex callouts and Named Credential evidence
-- normalized field-lineage index
-- offline read-only change/remove/deprecate simulator with downstream breaking paths and migration plan
-- continuous intelligence across snapshots: health trends, new/resolved risks and architecture drift
-- capability matrix expanded with transaction, Flow, Apex, testing, data, runtime, integration, simulation and continuous-intelligence capabilities
-- Knowledge Pack v3 with final intelligence artifacts
-- Markdown/HTML/PDF report sections for the final intelligence layer
-- final readiness contract with explicit product-vs-telemetry distinction
+## Publicação preparada
 
-## Validation
+A versão está sincronizada em pyproject, pacote, configuração e lockfile. O workflow existente publica por PyPI Trusted Publishing apenas quando uma release `v4.3.0` é publicada no GitHub. A preparação do PR não publica no PyPI e não altera a versão instalada no Mac.
 
-- Python compileall: PASS
-- Dementor automated tests: **53 passed**
-- Complete platform suite: **397 passed across 85 modules**
-- Legacy regression suite: PASS
-- New v4 intelligence tests: PASS
-- CLI `--version`: PASS (`dementor 4.2.1` and `labforce-dementor 4.2.1`)
-- CLI `simulate`: PASS
-- CLI `continuous`: PASS
-- JSON report generation: PASS
-- Markdown report generation: PASS
-- HTML report generation: PASS
-- Branded PDF report generation from the installed wheel: PASS
-- Wheel build: PASS (`labforce_dementor-4.2.1-py3-none-any.whl`)
-- Source distribution build: PASS (`labforce_dementor-4.2.1.tar.gz`)
-- `twine check --strict`: PASS
-- PEP 639 license expression and packaged license file: PASS
-- isolated install with `uv tool install <wheel>`: PASS
-- Fresh-environment wheel installation with declared dependencies: PASS
-- Wheel assets match the canonical Base UI logo byte-for-byte: PASS
-- Working-tree and Git-history distribution audits: PASS
-- Read-only guardrail contract preserved: PASS
+Instalação de homologação a partir do branch:
 
-PyPI upload is performed by GitHub Trusted Publishing when the `v4.2.1` release is published.
+```bash
+uv tool install --force 'git+https://github.com/paguilherme/Labforce_Dementor.git@feat/retrieve-governance-local-ai'
+dementor --version
+dementor run --target-org MINHA_ORG
+dementor ai-report --assessment CAMINHO/assessment.json
+```
 
-## Safety contract
-
-Dementor contains no deployment, DML, data import/upsert/delete, metadata mutation or Apex Anonymous execution capability. Change simulation is offline and sets `mutation_executed=false`; remediation continues to set `automatic_mutation_allowed=false`.
-
-## Residual boundaries
-
-These are platform/evidence boundaries, not missing engine features:
-
-1. exact Event Monitoring depth depends on Salesforce licensing and event availability;
-2. exact record-level effective access depends on sharing semantics and queryable evidence;
-3. data profiling is opt-in and sample-bounded by design;
-4. static analysis cannot make dynamic/configuration-driven dependencies mathematically complete, so such edges remain confidence-scored;
-5. duplicate semantics require organization-specific business keys and are intentionally not inferred from low cardinality alone.
-
-Those boundaries must remain explicit rather than be hidden behind false-positive “100% coverage” claims.
+Consulte [a auditoria técnica](docs/RETRIEVE_GOVERNANCE_LOCAL_AI.md) para configuração e comportamento dos adapters.
