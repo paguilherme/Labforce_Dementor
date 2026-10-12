@@ -20,7 +20,7 @@ def load_config(path: str | None = None) -> dict[str, Any]:
     project_default = Path(__file__).resolve().parents[2] / "config" / "default.yml"
     # When installed as a wheel, config/default.yml is outside package data. Fall back to embedded defaults.
     embedded = {
-        "product": {"name": "Labforce Dementor for Salesforce", "version": "4.2.0"},
+        "product": {"name": "Labforce Dementor for Salesforce", "version": "4.2.1"},
         "safety": {
             "mode": "CONTROLLED_READ_ONLY",
             "pause_metadata_if_deploy_active": True,
@@ -45,7 +45,7 @@ def load_config(path: str | None = None) -> dict[str, Any]:
             "weights": {"security": .20, "architecture": .12, "performance": .12, "automation": .10, "apex": .10, "testing": .08, "integrations": .08, "data_quality": .06, "governance": .06, "maintainability": .05, "observability": .03},
             "severity_penalty": {"critical": 12, "high": 6, "medium": 2, "low": .5, "info": 0},
         },
-        "report": {"title": "Salesforce Org Assessment", "confidentiality": "Confidential", "company_name": "", "timezone": "America/Maceio"},
+        "report": {"title": "Assessment da organização Salesforce", "confidentiality": "Confidencial", "company_name": "", "timezone": "America/Maceio"},
     }
     base = embedded
     if project_default.exists():
