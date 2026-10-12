@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from .analyzer import analyze, analyze_v2_intelligence, calculate_health
+from .analyzer import analyze, analyze_v2_intelligence, calculate_health, analyze_limit_governance
 from .models import AssessmentResult
 from .intelligence import collect_v2_runtime, build_intelligence
 from .intelligence_v3 import build_v3_intelligence, analyze_v3_intelligence
@@ -22,6 +22,8 @@ from .validation import validate_assessment_payload
 from .intelligence_v5 import build_v5_intelligence
 from .enterprise import build_enterprise_intelligence, stable_snapshot_digest
 from .intelligence_v7 import build_v7_intelligence, analyze_v7_intelligence, final_readiness
+from .governance_analysis import analyze_org_limits
+from .retrieve_audit import manifest_summary, retrieve_audit, snapshot_files, write_retrieve_audit, split_manifest, merge_profile_fragments
 
 
 ACTIVE_DEPLOY_STATUSES = {"pending", "inprogress", "queued", "canceling"}
@@ -212,6 +214,10 @@ def _manifest_api_version(path: Path) -> str | None:
     return None
 
 
+def _manifest_summary(path: Path) -> dict[str, Any]:
+    return manifest_summary(path)
+
+
 def _remove_source_bodies(components: dict[str, Any]) -> None:
     for key in ("apex_classes", "apex_triggers"):
         for item in components.get(key, []):
@@ -239,6 +245,9 @@ def run_assessment(
     work_dir.mkdir(parents=True, exist_ok=True)
     output_dir.mkdir(parents=True, exist_ok=True)
     checkpoint = CheckpointStore(output_dir / "checkpoint.json")
+    existing_source = work_dir / "force-app" / "main" / "default"
+    if source_dir is None and not resume and any(path.is_file() for path in existing_source.rglob("*")):
+        raise RuntimeError("Use an empty --work-dir for a new retrieve or --resume for a verified checkpoint. Existing source files were preserved.")
     project_file = work_dir / "sfdx-project.json"
     if not project_file.exists():
         project_file.write_text(json.dumps({
@@ -300,15 +309,49 @@ def run_assessment(
 
     resume_source = work_dir / "force-app" / "main" / "default"
     if resume and source_dir is None and checkpoint.done("metadata_retrieve") and resume_source.exists() and any(resume_source.rglob("*")):
+        stage = checkpoint.data["stages"]["metadata_retrieve"]
+        ledger_path = output_dir / "metadata-retrieve-audit.json"
+        if stage.get("org_id") != org.get("id") or not ledger_path.exists():
+            raise RuntimeError("Resume stopped: checkpoint org identity or retrieve audit is unavailable. Start with an empty work directory.")
+        ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+        if ledger.get("files") != snapshot_files(resume_source):
+            raise RuntimeError("Resume stopped: metadata snapshot differs from its audited hashes.")
         can_retrieve = False
         audit["metadata_source"] = "checkpoint_resume"
+        audit["metadata_coverage"] = {key: value for key, value in ledger.items() if key not in {"files", "returned_members"}}
         audit["resumed_from_checkpoint"] = True
 
     _emit_progress(progress, "metadata_retrieve", "start", "Definindo origem dos metadados")
     if can_retrieve:
         checkpoint.mark("metadata_retrieve", "running")
-        _emit_progress(progress, "metadata_retrieve", "update", "Gerando manifesto package.xml")
-        sf.generate_manifest(config["metadata"]["types"], manifest_dir, int(config["metadata"].get("list_metadata_batch_size", 10)))
+        if manifest_path.exists() or (work_dir / "package.xml").exists():
+            raise RuntimeError("A fresh retrieve requires a work directory without an existing package.xml. Existing files were preserved.")
+        metadata_cfg = config.get("metadata", {})
+        full_org = bool(metadata_cfg.get("full_org", True))
+        _emit_progress(progress, "metadata_retrieve", "update", "Descobrindo todo metadado recuperável da org" if full_org else "Gerando manifesto package.xml")
+        try:
+            sf.generate_manifest(
+                None if full_org else list(metadata_cfg.get("types", [])),
+                manifest_dir,
+                int(metadata_cfg.get("list_metadata_batch_size", 10)),
+                include_packages=list(metadata_cfg.get("include_packages", [])),
+            )
+            audit["metadata_discovery_mode"] = "full_org" if full_org else "configured_types"
+        except SFCLIError as exc:
+            if not full_org or not metadata_cfg.get("fallback_to_configured_types", True) or metadata_cfg.get("require_complete_snapshot", True):
+                raise
+            audit.setdefault("read_errors", []).append({
+                "phase": "full_org_manifest",
+                "message": f"Full metadata discovery failed; configured-type fallback used: {exc}",
+            })
+            _emit_progress(progress, "metadata_retrieve", "update", "Descoberta ampla falhou; usando lista de tipos configurada")
+            sf.generate_manifest(
+                list(metadata_cfg.get("types", [])),
+                manifest_dir,
+                int(metadata_cfg.get("list_metadata_batch_size", 10)),
+                include_packages=list(metadata_cfg.get("include_packages", [])),
+            )
+            audit["metadata_discovery_mode"] = "configured_types_fallback"
         limits_after_manifest = _normalize_limits(sf.limits())
         manifest_budget_hit, manifest_budget_state = _budget_exceeded(limits_before, limits_after_manifest, config)
         audit["api_budget_after_manifest"] = manifest_budget_state
@@ -319,15 +362,79 @@ def run_assessment(
                 manifest_path = candidate
         if not manifest_path.exists():
             raise RuntimeError("Manifest generation completed but package.xml was not found.")
+        audit["metadata_manifest"] = _manifest_summary(manifest_path)
+        if audit["metadata_manifest"].get("error") or not audit["metadata_manifest"].get("members"):
+            raise RuntimeError("Manifest is malformed or empty; static analysis was not started.")
+        shutil.copy2(manifest_path, output_dir / "metadata-package.xml")
+        write_retrieve_audit({"status": "discovered", "manifest": audit["metadata_manifest"], "files": []}, output_dir / "metadata-retrieve-audit.json")
         if manifest_budget_hit:
-            audit.setdefault("read_errors", []).append({"phase": "metadata_retrieve", "message": "Skipped because configured API budget was exceeded during metadata discovery."})
+            message = "Configured API budget was exceeded during complete metadata discovery."
+            audit.setdefault("read_errors", []).append({"phase": "metadata_retrieve", "message": message})
+            if metadata_cfg.get("require_complete_snapshot", True):
+                raise RuntimeError("Assessment stopped: the safe API budget was reached before the complete metadata snapshot could be retrieved.")
             _emit_progress(progress, "metadata_retrieve", "skipped", "Limite seguro de API atingido após o manifesto")
         else:
-            _emit_progress(progress, "metadata_retrieve", "update", "Baixando snapshot read-only da org")
-            sf.retrieve(manifest_path)
+            _check_api_headroom(limits_after_manifest, config)
+            if not _wait_for_deploys(sf, config, audit, max_wait_seconds=wait_for_deploy_seconds):
+                raise RuntimeError("Retrieve stopped: a deploy/validate became active during metadata discovery.")
+            manifest_summary = audit["metadata_manifest"]
+            _emit_progress(progress, "metadata_retrieve", "update", f"Baixando snapshot read-only: {manifest_summary.get('types', 0)} tipos e {manifest_summary.get('members', 0)} membros")
+            batches = split_manifest(manifest_path, output_dir / "metadata-manifests", int(metadata_cfg.get("retrieve_batch_members", 500)))
+            merged: dict[str, Any] = {"status": "Succeeded", "done": True, "files": [], "messages": []}
+            warnings: list[Any] = []
+            audit["metadata_retrieve_batches"] = []
+            try:
+                for index, batch in enumerate(batches, 1):
+                    if index > 1:
+                        current_limits = _normalize_limits(sf.limits())
+                        hit, state = _budget_exceeded(limits_before, current_limits, config)
+                        if hit:
+                            raise RuntimeError("Retrieve stopped between batches: configured API budget was reached.")
+                        _check_api_headroom(current_limits, config)
+                        if not _wait_for_deploys(sf, config, audit, max_wait_seconds=wait_for_deploy_seconds):
+                            raise RuntimeError("Retrieve stopped between batches: deploy/validate is active.")
+                    _emit_progress(progress, "metadata_retrieve", "update", f"Recuperando lote {index}/{len(batches)}")
+                    previous_profiles = {path.name: path.read_bytes() for path in (existing_source / "profiles").glob("*.profile-meta.xml")}
+                    reply = sf.retrieve(batch)
+                    batch_result = _unwrap(reply)
+                    batch_result = batch_result if isinstance(batch_result, dict) else {}
+                    audit["metadata_retrieve_batches"].append({"index": index, "manifest": _manifest_summary(batch), "status": batch_result.get("status"), "id": batch_result.get("id")})
+                    for key in ("files", "messages"):
+                        values = batch_result.get(key, batch_result.get("fileProperties", []) if key == "files" else []) or []
+                        merged[key].extend(values if isinstance(values, list) else [values])
+                    if reply.get("warnings"):
+                        warnings.extend(reply["warnings"] if isinstance(reply["warnings"], list) else [reply["warnings"]])
+                    if reply.get("status", 0) not in (0, None) or batch_result.get("success") is False or batch_result.get("done") is False or str(batch_result.get("status", "")).lower() in {"failed", "error", "pending", "inprogress", "canceled"}:
+                        raise RuntimeError("Salesforce returned an unsuccessful retrieve batch.")
+                    audit["metadata_retrieve_batches"][-1]["profile_grants_merged"] = merge_profile_fragments(previous_profiles, existing_source)
+                retrieve_result = {"status": 0, "result": merged, "warnings": warnings}
+            except (SFCLIError, RuntimeError) as exc:
+                write_retrieve_audit({"status": "failed", "manifest": audit["metadata_manifest"], "error": str(exc), "batches": audit["metadata_retrieve_batches"], "files": snapshot_files(existing_source)}, output_dir / "metadata-retrieve-audit.json")
+                raise
             audit["metadata_retrieve_executed"] = True
-            checkpoint.mark("metadata_retrieve", "done", manifest=str(manifest_path))
-            _emit_progress(progress, "metadata_retrieve", "done", "Snapshot Salesforce recuperado")
+            audit["metadata_retrieve_result"] = {
+                "status": _unwrap(retrieve_result).get("status"),
+                "done": _unwrap(retrieve_result).get("done"),
+            }
+            retrieved_root = work_dir / "force-app" / "main" / "default"
+            retrieved_files = sum(1 for path in retrieved_root.rglob("*") if path.is_file())
+            audit["metadata_snapshot_files"] = retrieved_files
+            ledger = retrieve_audit(manifest_path, retrieved_root, retrieve_result,
+                                    mode=audit["metadata_discovery_mode"], include_packages=list(metadata_cfg.get("include_packages", [])))
+            ledger["batches"] = audit["metadata_retrieve_batches"]
+            # Tooling inventory provides independent coverage evidence for visible unmanaged Apex.
+            for key, directory, suffix in (("apex_classes_tooling", "classes", ".cls"), ("apex_triggers_tooling", "triggers", ".trigger")):
+                records = runtime.get(key, {}).get("records", [])
+                missing = [row["Name"] for row in records if not row.get("NamespacePrefix") and row.get("Status") != "Deleted" and row.get("Name") and not (retrieved_root / directory / f"{row['Name']}{suffix}").exists()]
+                if missing:
+                    ledger.setdefault("missing_apex_from_tooling", {})[key] = missing
+                    ledger["status"] = "partial"
+            write_retrieve_audit(ledger, output_dir / "metadata-retrieve-audit.json")
+            audit["metadata_coverage"] = {key: value for key, value in ledger.items() if key not in {"files", "returned_members"}}
+            if ledger["retrieve_failed"] or (metadata_cfg.get("require_complete_snapshot", True) and (ledger["status"] == "partial" or ledger["unverified_members"])):
+                raise RuntimeError("Assessment stopped: snapshot coverage is partial or unverified. Review metadata-retrieve-audit.json before retrying.")
+            checkpoint.mark("metadata_retrieve", "done", manifest=str(manifest_path), org_id=org.get("id"))
+            _emit_progress(progress, "metadata_retrieve", "done", f"Snapshot Salesforce recuperado: {retrieved_files} arquivos")
     elif audit.get("metadata_source") == "checkpoint_resume":
         _emit_progress(progress, "metadata_retrieve", "done", "Snapshot reutilizado do checkpoint")
     elif source_dir is None and not strict_mode:
@@ -337,16 +444,27 @@ def run_assessment(
             "message": f"Skipped because {reason}."
         })
         safe_reason = "Limite seguro de API atingido" if budget_hit else "Deploy ativo; recuperação evitada"
+        if config.get("metadata", {}).get("require_complete_snapshot", True):
+            raise RuntimeError(f"Assessment stopped before static analysis: {safe_reason}. A complete metadata snapshot is required.")
         _emit_progress(progress, "metadata_retrieve", "skipped", safe_reason)
     elif source_dir is not None:
+        if not source_dir.exists() or not any(path.is_file() for path in source_dir.rglob("*")):
+            raise RuntimeError(f"Assessment stopped: the local metadata snapshot is empty or unavailable: {source_dir}")
         _emit_progress(progress, "metadata_retrieve", "done", "Usando snapshot local informado")
+        ledger = {"schema": "dementor-retrieve-audit-v1", "status": "external_snapshot_unverified", "org_completeness_proven": False, "files": snapshot_files(source_dir), "boundary": "Snapshot supplied by the user; org coverage was not independently verified."}
+        write_retrieve_audit(ledger, output_dir / "metadata-retrieve-audit.json")
+        audit["metadata_coverage"] = {key: value for key, value in ledger.items() if key != "files"}
     elif strict_mode:
+        if config.get("metadata", {}).get("require_complete_snapshot", True):
+            raise RuntimeError("Assessment stopped: STRICT_READ_ONLY requires --source-dir with a previously retrieved complete snapshot.")
         _emit_progress(progress, "metadata_retrieve", "skipped", "STRICT_READ_ONLY sem snapshot local")
 
     source_root = source_dir.resolve() if source_dir is not None else (work_dir / "force-app" / "main" / "default")
     _emit_progress(progress, "static_analysis", "start", "Lendo componentes do snapshot")
     checkpoint.mark("static_analysis", "running", source_root=str(source_root))
     components = parse_source(source_root)
+    audit["metadata_parser_boundary"] = "Retrieved files are all hashed; semantic rules cover the component families implemented by the parser. Retrieval does not imply semantic analysis of every metadata type."
+    components["org_limit_governance"] = analyze_org_limits(limits_before, config)
     components["runtime"] = runtime
     components["runtime_v2"] = runtime_v2
     components["manifest_api_version"] = _manifest_api_version(manifest_path)
@@ -369,6 +487,13 @@ def run_assessment(
     # Final enterprise correlation layer: transaction topology, deep Flow/Apex/test/data/runtime/integration intelligence.
     components["intelligence"]["v7"] = build_v7_intelligence(components, dependencies, findings, runtime_v2)
     analyze_v7_intelligence(components, findings)
+    limits_after = _normalize_limits(sf.limits())
+    components["org_limit_governance"] = analyze_org_limits(limits_after, config, limits_before)
+    findings[:] = [finding for finding in findings if not finding.id.startswith("ORGLIMIT-")]
+    analyze_limit_governance(components, findings)
+    audit["api_budget"] = _api_budget(limits_before, limits_after, config)
+    exceeded, budget_final = _budget_exceeded(limits_before, limits_after, config)
+    audit["api_budget_final"] = {**budget_final, "exceeded": exceeded, "note": "Checkpoints estimate org-wide usage; individual CLI operations can exceed the remaining budget before the next measurement."}
     # Recalculate blast radius after all semantic and transaction edges have been added.
     from .intelligence import calculate_blast_radius
     components["intelligence"]["blast_radius"] = calculate_blast_radius(dependencies)
@@ -380,8 +505,6 @@ def run_assessment(
     _remove_source_bodies(components)
     checkpoint.mark("static_analysis", "done")
     _emit_progress(progress, "static_analysis", "done", f"{len(findings)} achado(s); health score {health.get('overall', 0)}/100")
-    limits_after = _normalize_limits(sf.limits())
-    audit["api_budget"] = _api_budget(limits_before, limits_after, config)
 
     finished = datetime.now(timezone.utc)
     result = AssessmentResult(

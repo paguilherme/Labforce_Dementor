@@ -1,6 +1,8 @@
-# Labforce Dementor for Salesforce v4.2.1
+# Labforce Dementor for Salesforce v4.3.0
 
-O diagnóstico continua determinístico e funciona sem IA. A versão 4.1 adiciona um complemento de IA opcional, separado e sujeito à autorização explícita do usuário. A versão 4.2 entrega o pacote instalável e o comando curto `dementor`.
+O diagnóstico permanece determinístico e read-only. A v4.3.0 adiciona retrieve abrangente em lotes com manifesto auditável, candidatos a Classes Deus de produção/testes, governança dos limites da org e complemento por CLI local autenticado, sem chave de API.
+
+Veja a [auditoria e documentação da v4.3.0](docs/RETRIEVE_GOVERNANCE_LOCAL_AI.md) para configuração, metodologia e limites de cobertura.
 
 ## Instalação via CLI
 
@@ -21,12 +23,12 @@ O nome simples de distribuição `dementor` já pertence a um projeto de terceir
 Para instalar um wheel entregue diretamente pela Labforce:
 
 ```bash
-uv tool install ./labforce_dementor-4.2.1-py3-none-any.whl
+uv tool install ./labforce_dementor-4.3.0-py3-none-any.whl
 ```
 
 ## Complemento opcional por IA
 
-Em um terminal interativo, `dementor run` pergunta ao final se você deseja gerar o complemento. O assistente pede provedor, modelo exato, escopo dos dados e origem da credencial; cria a prévia sanitizada e só envia dados depois que você digita a frase de autorização exibida. A opção inicial de gerar o relatório ainda não autoriza o envio.
+Em um terminal interativo, `dementor run` pergunta ao final se você deseja gerar o complemento. O assistente oferece Codex, Claude Code ou Gemini CLI instalados no PATH e pede modelo, escopo dos dados e identificação de quem autoriza; cria a prévia sanitizada e só envia dados depois que você digita a frase de autorização exibida. A opção inicial de gerar o relatório ainda não autoriza o envio.
 
 Para aproveitar um assessment já concluído, sem repetir a coleta Salesforce:
 
@@ -41,8 +43,8 @@ Use `--no-ai-prompt` no `run` para pular a pergunta. Em sessões sem terminal in
 ```bash
 dementor ai-preview \
   --assessment assessment.json \
-  --provider openai \
-  --model MODELO_EXATO_ESCOLHIDO_PELO_USUARIO \
+  --provider codex-local \
+  --model default \
   --scope findings_with_evidence \
   --output ai-consent-preview.json
 ```
@@ -54,12 +56,10 @@ dementor ai-complement \
   --preview ai-consent-preview.json \
   --authorize AUTORIZAR-XXXXXXXX \
   --authorized-by usuario@example.com \
-  --organization minha-organizacao \
-  --project meu-projeto \
   --output-dir ai-complement-report
 ```
 
-Provedores: OpenAI API, Anthropic API, Google Gemini API e Ollama local. O modelo é sempre informado de forma explícita pelo usuário. Por padrão, as chaves são obtidas do cofre local da Labforce Base no escopo organização/cliente/projeto; `--credential-source environment` existe para a distribuição independente. Segredos não são gravados em prompt, relatório ou log.
+No fluxo guiado, os CLIs usam suas próprias contas autenticadas e quotas. O Dementor não solicita chave de API nem depende da Base Salesforce. O CLI ainda envia o payload autorizado para processamento pelo provedor. Executáveis antigos ou não autenticados falham sem fallback para API. Os adapters de API/Ollama continuam somente nos comandos manuais explícitos por compatibilidade.
 
 O consentimento é preso ao hash do diagnóstico, provedor, modelo, escopos, prompt e payload. Ele expira, é de uso único e deixa um recibo local. O resultado da IA é um relatório consultivo separado e não altera score, severidade ou achados.
 
@@ -473,7 +473,7 @@ metadata:
   list_metadata_batch_size: 10
 ```
 
-Dementor checks API headroom and detects active deploy/validate jobs before metadata retrieve. Runtime reads continue to be best-effort; heavy metadata collection is skipped when the configured safety budget is reached.
+Dementor checks API headroom and detects active deploy/validate jobs before metadata retrieve. Runtime reads remain best-effort. A complete retrieve stops on budget/deploy conflicts or partial coverage and preserves its audit. The guard is checked between retrieve batches; checkpoints estimate org-wide usage rather than enforcing an exact per-request API cap.
 
 ## Interpretation rule
 

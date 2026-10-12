@@ -101,6 +101,37 @@ pre { white-space: pre-wrap; word-wrap: break-word; background: #f6f8fa; padding
 {% for c in data.components.apex_classes %}<tr><td>{{ c.api_name }}</td><td>{{ c.lines }}</td><td>{{ c.api_version }}</td><td>{{ c.is_test }}</td><td>{{ c.is_rest }}</td><td>{{ c.is_invocable }}</td><td>{{ c.uses_callout }}</td></tr>{% endfor %}
 </tbody></table>
 
+{% set gov = data.components.get('code_governance', {}) %}
+{% set org_limits = data.components.get('org_limit_governance', {}) %}
+<h2>Governança técnica</h2>
+<p>{{ gov.get('methodology', '') }}</p>
+<div class="grid">
+  <div class="card"><div class="small">Classes Deus candidatas</div><div class="metric">{{ gov.get('god_class_candidates', [])|length }}</div></div>
+  <div class="card"><div class="small">Classes Deus de testes</div><div class="metric">{{ gov.get('god_test_class_candidates', [])|length }}</div></div>
+  <div class="card"><div class="small">Limites críticos</div><div class="metric">{{ org_limits.get('critical_count', 0) }}</div></div>
+  <div class="card"><div class="small">Limites em alerta</div><div class="metric">{{ org_limits.get('warning_count', 0) }}</div></div>
+</div>
+<h3>Concentração de responsabilidades em Apex</h3>
+<table><thead><tr><th>Classe</th><th>Tipo</th><th>Pontuação</th><th>Linhas</th><th>Métodos</th><th>Complexidade</th><th>Dependências</th><th>Responsabilidades</th></tr></thead><tbody>
+{% for c in gov.get('god_class_candidates', []) + gov.get('god_test_class_candidates', []) %}<tr><td>{{ c.api_name }}</td><td>{{ 'Teste' if c.is_test else 'Produção' }}</td><td>{{ c.score }}</td><td>{{ c.lines }}</td><td>{{ c.test_methods if c.is_test else c.methods }}</td><td>{{ c.complexity_proxy }}</td><td>{{ c.class_dependencies }}</td><td>{{ c.responsibilities }}</td></tr>{% else %}<tr><td colspan="8">Nenhuma candidata nos componentes analisados, segundo os limiares configurados.</td></tr>{% endfor %}
+</tbody></table>
+<h3>Limites da organização com margem reduzida</h3>
+<p>{{ org_limits.get('note', '') }}</p>
+{% if not org_limits.get('available', false) %}<p>Limites indisponíveis; ausência de alertas não comprova margem saudável.</p>{% endif %}
+{% if charts.get('org_limit_headroom') %}<img class="chart" src="{{ charts.get('org_limit_headroom') }}" alt="Margem restante dos limites da organização">{% endif %}
+<table><thead><tr><th>Limite</th><th>Status</th><th>Máximo</th><th>Utilizado</th><th>Restante</th><th>Margem</th></tr></thead><tbody>
+{% for row in org_limits.get('outside_governance', []) %}<tr><td>{{ row.name }}</td><td>{{ 'Crítico' if row.status == 'critical' else 'Alerta' }}</td><td>{{ row.max }}</td><td>{{ row.used }} ({{ row.used_percent }}%)</td><td>{{ row.remaining }}</td><td>{{ row.remaining_percent }}%</td></tr>{% endfor %}
+</tbody></table>
+
+<h3>Todos os limites observados</h3>
+<table><thead><tr><th>Limite</th><th>Status</th><th>Máximo</th><th>Utilizado</th><th>Restante</th><th>Margem</th></tr></thead><tbody>
+{% for row in org_limits.get('limits', []) %}<tr><td>{{ row.name }}</td><td>{{ {'healthy':'Saudável', 'warning':'Alerta', 'critical':'Crítico'}.get(row.status, row.status) }}</td><td>{{ row.max }}</td><td>{{ row.used }}</td><td>{{ row.remaining }}</td><td>{{ row.remaining_percent }}%</td></tr>{% endfor %}
+</tbody></table>
+<h3>Concentração estática de operações</h3>
+<table><thead><tr><th>Componente</th><th>Indicadores (não medem consumo por transação)</th></tr></thead><tbody>
+{% for row in gov.get('transaction_governor_risks', []) %}<tr><td>{{ row.component }}</td><td>{% for risk in row.risks %}{{ risk.metric }}={{ risk.count }} (alerta: {{ risk.warning_threshold }}) {% endfor %}</td></tr>{% endfor %}
+</tbody></table>
+
 <h2>Integrações</h2>
 <table><thead><tr><th>Tipo</th><th>Componente</th></tr></thead><tbody>
 {% for x in data.components.named_credentials %}<tr><td>Named Credential</td><td>{{ x.api_name }}</td></tr>{% endfor %}
@@ -240,6 +271,9 @@ pre { white-space: pre-wrap; word-wrap: break-word; background: #f6f8fa; padding
 <tr><th>Execuções de Apex Anonymous</th><td>0</td></tr>
 <tr><th>Operações de leitura executadas</th><td>{{ data.audit.get('read_operations', 0) }}</td></tr>
 <tr><th>Recuperação de metadados</th><td>{{ 'Sim' if data.audit.get('metadata_retrieve_executed', false) else 'Não' }}</td></tr>
+<tr><th>Cobertura do snapshot</th><td>{{ data.audit.get('metadata_coverage', {}).get('status', 'N/D') }}</td></tr>
+<tr><th>SHA-256 do manifesto</th><td>{{ data.audit.get('metadata_manifest', {}).get('sha256', 'N/D') }}</td></tr>
+<tr><th>Auditoria do retrieve</th><td>metadata-retrieve-audit.json; metadata-package.xml quando houve retrieve. O escopo é limitado por API, permissões e pacotes.</td></tr>
 <tr><th>Code Analyzer</th><td>{{ data.code_analyzer.get('available', false) }}</td></tr>
 </tbody></table>
 

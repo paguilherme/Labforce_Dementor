@@ -130,6 +130,18 @@ def _make_charts(data: dict[str, Any], output_dir: Path) -> dict[str, str]:
         fig.savefig(p, dpi=160, bbox_inches="tight")
         plt.close(fig)
         charts["app_usage"] = str(p.relative_to(output_dir))
+    limits = data.get("components", {}).get("org_limit_governance", {}).get("limits", [])[:12]
+    if limits:
+        fig, ax = plt.subplots(figsize=(9, max(3, len(limits) * .32)))
+        ax.barh([row["name"] for row in reversed(limits)], [row["remaining_percent"] for row in reversed(limits)],
+                color=["#e67b84" if row["status"] == "critical" else "#e0b76a" if row["status"] == "warning" else "#6c9bba" for row in reversed(limits)])
+        ax.set_xlabel("Margem restante (%)")
+        ax.set_title("Menores margens dos limites da organização")
+        p = chart_dir / "org_limit_headroom.png"
+        fig.tight_layout()
+        fig.savefig(p, dpi=160, bbox_inches="tight")
+        plt.close(fig)
+        charts["org_limit_headroom"] = str(p.relative_to(output_dir))
     return charts
 
 
@@ -152,6 +164,55 @@ def _markdown(data: dict[str, Any], logo_reference: str = "assets/labforce-logo.
     lines += ["", "## Inventário", "", "| Tipo | Quantidade |", "|---|---:|"]
     for key, value in data.get("inventory", {}).items():
         lines.append(f"| {inventory_label(key)} | {value} |")
+
+    audit = data.get("audit", {})
+    manifest = audit.get("metadata_manifest", {})
+    coverage = audit.get("metadata_coverage", {})
+    if manifest or coverage:
+        lines += ["", "## Snapshot de metadados", "",
+                  f"- Modo de descoberta: **{audit.get('metadata_discovery_mode', 'N/D')}**",
+                  f"- Tipos no manifesto: **{manifest.get('types', 0)}**",
+                  f"- Membros no manifesto: **{manifest.get('members', 0)}**",
+                  f"- Arquivos recuperados: **{audit.get('metadata_snapshot_files', coverage.get('file_count', 0))}**",
+                  f"- Cobertura: **{coverage.get('status', 'N/D')}**",
+                  f"- SHA-256 do manifesto: `{manifest.get('sha256', 'N/D')}`",
+                  "- Auditoria detalhada: `metadata-retrieve-audit.json`; manifesto: `metadata-package.xml` quando houve retrieve.",
+                  "- O escopo recuperado depende da API, permissões e pacotes; não comprova cobertura integral da org."]
+
+    governance = data.get("components", {}).get("code_governance", {})
+    org_limits = data.get("components", {}).get("org_limit_governance", {})
+    if governance or org_limits:
+        lines += ["", "## Governança técnica", "",
+                  f"- Candidatas a Classe Deus: **{len(governance.get('god_class_candidates', []))}**",
+                  f"- Candidatas a Classe Deus de testes: **{len(governance.get('god_test_class_candidates', []))}**",
+                  f"- Limites da org em estado crítico: **{org_limits.get('critical_count', 0)}**",
+                  f"- Limites da org em alerta: **{org_limits.get('warning_count', 0)}**"]
+        candidates = governance.get("god_class_candidates", []) + governance.get("god_test_class_candidates", [])
+        if candidates:
+            lines += ["", "### Classes com concentração de responsabilidades", "", "| Classe | Tipo | Pontuação | Linhas | Métodos | Complexidade |", "|---|---|---:|---:|---:|---:|"]
+            for row in candidates[:50]:
+                kind = "Teste" if row.get("is_test") else "Produção"
+                methods = row.get("test_methods") if row.get("is_test") else row.get("methods")
+                lines.append(f"| {row.get('api_name')} | {kind} | {row.get('score')} | {row.get('lines')} | {methods} | {row.get('complexity_proxy')} |")
+        attention = org_limits.get("outside_governance", [])
+        lines += ["", org_limits.get("note", ""), "", governance.get("methodology", "")]
+        if not org_limits.get("available"):
+            lines.append("Limites da org indisponíveis; ausência de alerta não significa margem saudável.")
+        risks = governance.get("transaction_governor_risks", [])
+        if risks:
+            lines += ["", "### Concentração estática de operações", "", "| Componente | Indicadores estáticos |", "|---|---|"]
+            for row in risks:
+                detail = ", ".join(f"{risk['metric']}={risk['count']} (alerta: {risk['warning_threshold']})" for risk in row['risks'])
+                lines.append(f"| {row['component']} | {detail} |")
+        if attention:
+            lines += ["", "### Limites com margem reduzida", "", "| Limite | Status | Utilizado | Restante |", "|---|---|---:|---:|"]
+            for row in attention[:50]:
+                lines.append(f"| {row.get('name')} | {row.get('status')} | {row.get('used_percent')}% | {row.get('remaining_percent')}% |")
+        if org_limits.get("limits"):
+            lines += ["", "### Todos os limites observados", "", "| Limite | Status | Máximo | Utilizado | Restante | Margem |", "|---|---|---:|---:|---:|---:|"]
+            for row in org_limits["limits"]:
+                label = {"healthy": "Saudável", "warning": "Alerta", "critical": "Crítico"}[row["status"]]
+                lines.append(f"| {row['name']} | {label} | {row['max']} | {row['used']} | {row['remaining']} | {row['remaining_percent']}% |")
 
     ent = data.get("components", {}).get("intelligence", {}).get("enterprise", {})
     twin = ent.get("digital_twin", {})

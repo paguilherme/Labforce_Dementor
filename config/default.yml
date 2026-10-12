@@ -1,6 +1,6 @@
 product:
   name: "Labforce Dementor for Salesforce"
-  version: "4.2.1"
+  version: "4.3.0"
 
 safety:
   mode: "CONTROLLED_READ_ONLY"
@@ -13,7 +13,14 @@ safety:
   min_seconds_between_cli_calls: 0.15
 
 metadata:
+  # Descobre todo metadado recuperável pela Metadata API. A lista abaixo é
+  # usada apenas como fallback para versões/ambientes onde a descoberta ampla falhar.
+  full_org: true
+  require_complete_snapshot: true
+  fallback_to_configured_types: true
+  include_packages: []
   list_metadata_batch_size: 10
+  retrieve_batch_members: 500
   types:
     - ApexClass
     - ApexTrigger
@@ -53,6 +60,26 @@ analysis:
   large_data_volume_threshold: 1000000
   data_profile_enabled: false
   data_profile_sample_size: 200
+  god_class:
+    min_lines: 500
+    min_methods: 20
+    min_complexity: 50
+    min_dependencies: 12
+    min_responsibilities: 8
+    min_score: 65
+  god_test_class:
+    min_lines: 700
+    min_test_methods: 25
+    min_dependencies: 15
+    min_responsibilities: 10
+    min_score: 65
+  org_limits:
+    warning_remaining_percent: 20
+    critical_remaining_percent: 10
+  governor_risk:
+    soql_statements: 80
+    dml_statements: 120
+    callouts: 80
   data_profile_max_objects: 10
   data_profile_max_fields_per_object: 25
   event_log_download_enabled: true

@@ -5,8 +5,9 @@ import shlex
 import sys
 from pathlib import Path
 
-from .ai_complement import AiComplementError, DATA_SCOPES, PROVIDERS, create_preview, execute_complement
+from .ai_complement import AiComplementError, DATA_SCOPES, create_preview, execute_complement
 from .ai_credentials import PROVIDER_KEYS, resolve_ai_credential
+from .local_ai import LOCAL_AI_PROVIDERS, detect_local_ai
 
 
 def _choose(prompt: str, options: tuple[str, ...]) -> str:
@@ -44,22 +45,19 @@ def offer_ai_report(assessment_path: Path) -> bool:
             print(f"Para gerar o complemento depois: {command}")
             return True
 
-        print("Escolha o provedor:")
-        provider = _choose("Provedor", PROVIDERS)
-        model = _required("Modelo exato escolhido por você: ")
+        detected = detect_local_ai()
+        if not detected:
+            print("Nenhum assistente local compatível foi encontrado no PATH.")
+            print("Instale e autentique Codex, Claude Code ou Gemini CLI no mesmo usuário do VS Code.")
+            print("Nenhuma API foi chamada e o assessment permanece disponível.")
+            return True
+        print("Assistentes locais autenticáveis detectados:")
+        for item in detected:
+            print(f"  - {item['label']} ({item['executable']})")
+        provider = _choose("Assistente", tuple(item["provider"] for item in detected))
+        model = input("Modelo escolhido (Enter usa o padrão da sessão): ").strip() or "default"
         print("Escolha os dados que poderão ser enviados:")
         scope = _choose("Escopo", DATA_SCOPES)
-        organization = client = project = None
-        source = "environment"
-        if provider != "ollama":
-            print("Escolha a origem da credencial:")
-            source = _choose("Credencial", ("environment", "labforce-base"))
-            if source == "environment":
-                print(f"A chave será lida de {PROVIDER_KEYS[provider]}; não digite a chave aqui.")
-            else:
-                organization = _required("Organização no cofre Labforce: ")
-                client = input("Cliente no cofre (opcional): ").strip() or None
-                project = input("Projeto no cofre (opcional): ").strip() or None
         authorized_by = _required("Seu nome ou e-mail para o registro de autorização: ")
         preview_path = assessment_path.parent / "ai-consent-preview.json"
         plan = create_preview(
@@ -79,7 +77,7 @@ def offer_ai_report(assessment_path: Path) -> bool:
         print(f"Prévia     : {preview_path}")
         print(f"Conteúdo   : {plan['input_path']}")
         print(plan["notice"])
-        print("Revise o arquivo de conteúdo antes de autorizar. O provedor pode cobrar pelo uso.")
+        print("Revise o conteúdo antes de autorizar. O CLI usa sua conta e quota; os dados serão processados pelo provedor.")
         phrase = input(
             f"Para autorizar o envio, digite {plan['authorization_phrase']} (Enter cancela): "
         ).strip()
@@ -87,23 +85,12 @@ def offer_ai_report(assessment_path: Path) -> bool:
             print("Envio não autorizado. Nenhum dado foi enviado à IA.")
             return True
 
-        def credential_loader() -> tuple[str | None, str]:
-            credential = resolve_ai_credential(
-                provider,
-                source=source,
-                organization=organization,
-                client=client,
-                project=project,
-            )
-            return credential.api_key, credential.reference
-
         output_dir = assessment_path.parent / "ai-complement-report"
         result = execute_complement(
             preview_path,
             authorization_phrase=phrase,
             authorized_by=authorized_by,
             output_dir=output_dir,
-            credential_loader=credential_loader,
         )
         print("Complemento consultivo concluído; o diagnóstico determinístico foi preservado.")
         print(f"Provedor   : {result['provider']}")
