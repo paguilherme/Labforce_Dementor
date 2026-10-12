@@ -141,7 +141,7 @@ def build_digital_twin(components: dict[str, Any], dependencies: list[dict[str, 
         "articulation_points": articulation[:200],
         "hotspots": hotspots[:250],
         "normalized_edges": edges,
-        "note": "Structural criticality is a deterministic proxy. Business criticality requires organization-specific overrides/evidence.",
+        "note": "A criticidade estrutural é uma aproximação determinística. A criticidade de negócio exige ajustes e evidências específicos da organização.",
     }
 
 
@@ -305,7 +305,7 @@ def build_remediation_plan(findings: list[Any], digital_twin: dict[str, Any]) ->
     return {
         "items": rows,
         "by_priority": dict(Counter(x["priority"] for x in rows)),
-        "guardrail": "Dementor recommends and prioritizes remediation but never mutates the Salesforce org.",
+        "guardrail": "O Dementor recomenda e prioriza remediações, mas nunca altera a organização Salesforce.",
     }
 
 
@@ -316,35 +316,35 @@ def build_architecture_advisor(components: dict[str, Any], digital_twin: dict[st
         recommendations.append({
             "theme": "automation",
             "priority": "P1",
-            "title": "Review automation dependency cycles",
-            "rationale": f"{len(cycles)} strongly connected automation cycle(s) were found in the Digital Twin.",
-            "actions": ["Confirm transaction order and recursion guards", "Consolidate overlapping automation where justified", "Add regression tests around the cycle boundary"],
+            "title": "Revisar ciclos de dependência entre automações",
+            "rationale": f"Foram encontrados {len(cycles)} ciclo(s) de automação fortemente conectado(s) no Gêmeo Digital.",
+            "actions": ["Confirmar a ordem da transação e as proteções contra recursão", "Consolidar automações sobrepostas quando justificável", "Adicionar testes de regressão nos limites do ciclo"],
         })
     top = digital_twin.get("hotspots", [])[:10]
     if top:
         recommendations.append({
             "theme": "architecture",
             "priority": "P1",
-            "title": "Protect structural hotspots with impact gates",
-            "rationale": "High-connectivity components have disproportionate blast radius.",
-            "actions": ["Require impact analysis before change", "Select regression tests from dependency neighborhood", "Track hotspot score over time"],
+            "title": "Proteger pontos críticos estruturais com critérios de impacto",
+            "rationale": "Componentes com alta conectividade possuem raio de impacto desproporcional.",
+            "actions": ["Exigir análise de impacto antes da mudança", "Selecionar testes de regressão a partir das dependências próximas", "Acompanhar a pontuação do ponto crítico ao longo do tempo"],
             "components": [x["component"] for x in top],
         })
     if any(x.get("priority") == "P0" for x in remediation.get("items", [])):
         recommendations.append({
             "theme": "risk",
             "priority": "P0",
-            "title": "Resolve evidence-backed critical findings first",
-            "rationale": "At least one critical, sufficiently supported finding requires immediate review.",
-            "actions": ["Assign an owner", "Validate the finding in the target environment", "Prepare rollback-aware remediation", "Re-run assessment after remediation"],
+            "title": "Resolver primeiro os achados críticos sustentados por evidências",
+            "rationale": "Pelo menos um achado crítico com evidências suficientes exige revisão imediata.",
+            "actions": ["Definir um responsável", "Validar o achado no ambiente-alvo", "Preparar remediação considerando reversão", "Executar novamente o assessment após a remediação"],
         })
     if not components.get("intelligence", {}).get("v3", {}).get("data_quality_profile", {}).get("enabled"):
         recommendations.append({
             "theme": "data_quality",
             "priority": "P2",
-            "title": "Run opt-in data profiling for a complete data-quality baseline",
-            "rationale": "Metadata alone cannot establish real field population/cardinality/skew.",
-            "actions": ["Enable --profile-data in an approved assessment window", "Keep sample caps conservative", "Do not persist raw business values"],
+            "title": "Executar perfil de dados opcional para uma linha de base completa",
+            "rationale": "Somente os metadados não determinam o preenchimento, a cardinalidade nem a concentração real dos campos.",
+            "actions": ["Ativar --profile-data em uma janela de assessment aprovada", "Manter limites conservadores para a amostra", "Não persistir valores brutos de negócio"],
         })
     return {"recommendations": recommendations, "generated_by": "deterministic-advisor", "llm_required": False}
 
@@ -370,7 +370,7 @@ def build_competitive_readiness(capability_matrix: dict[str, Any]) -> dict[str, 
     return {
         "domains": rows,
         "overall_readiness_percent": round(sum(x["readiness_percent"] for x in rows) / len(rows), 1) if rows else 0.0,
-        "interpretation": "Internal capability readiness, not a vendor performance claim. Competitive parity must be validated against current vendor editions and licenses.",
+        "interpretation": "Prontidão interna das capacidades; não é uma afirmação de desempenho de fornecedores. A paridade competitiva deve ser validada conforme edições e licenças atuais.",
     }
 
 
